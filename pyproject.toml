@@ -1,0 +1,26 @@
+[project]
+name = "skrooge"
+version = "0.1"
+description = "A quick and dirty kubernetes cost estimator"
+readme = "README.md"
+authors = [{name = "Michael Warkentin"}]
+license = {text = "Apache-2.0"}
+requires-python = ">=3.8"
+classifiers = [
+    "License :: OSI Approved :: Apache Software License"
+]
+dependencies = [
+    "click"
+]
+
+[project.urls]
+Homepage = "https://github.com/mwarkentin/skrooge"
+Changelog = "https://github.com/mwarkentin/skrooge/releases"
+Issues = "https://github.com/mwarkentin/skrooge/issues"
+CI = "https://github.com/mwarkentin/skrooge/actions"
+
+[project.entry-points.console_scripts]
+skrooge = "skrooge.cli:cli"
+
+[project.optional-dependencies]
+test = ["pytest"]
