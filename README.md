@@ -7,6 +7,10 @@
 
 A quick and dirty kubernetes cost estimator
 
+![OIG 0uCanRKKeLq7XwJysZQ3](https://github.com/getsentry/skrooge/assets/67560/8ba2d274-4281-43a0-ad75-f0838e29e5f4)
+*Ebenezer scrooge standing at the helm of a ship, pencil sketch*
+
+
 ## Idea
 
 I've been manually calculating how much scaling kubernetes deployments up or down will cost (or save!).
