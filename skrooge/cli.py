@@ -1,4 +1,8 @@
+import difflib
+
 import click
+
+from .instances import instance_types
 
 
 @click.group()
@@ -38,5 +42,14 @@ def estimate(replicas, cpu, mem, instance):
     click.echo(f"{mem=}")
     click.echo(f"{instance=}")
 
-if __name__ == '__main__':
+    if instance is not None:
+        try:
+            click.echo(f"{instance_types[instance]=}")
+        except KeyError:
+            close_matches = difflib.get_close_matches(instance, instance_types.keys())
+            missing_instance_type_link = "https://github.com/getsentry/skrooge/issues/new?assignees=&labels=&projects=&template=BUG_REPORT.md"
+            raise click.BadParameter(f"{instance} not found. Did you mean: {', '.join(close_matches)}\nMissing? {missing_instance_type_link}")
+
+
+if __name__ == "__main__":
     cli()
