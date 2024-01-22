@@ -3,6 +3,7 @@ import difflib
 import click
 
 from .instances import instance_types
+from .utils import determine_constrained_resource, determine_instance_count_required
 
 
 @click.group()
@@ -56,6 +57,17 @@ def estimate(replicas, cpu, mem, instance):
     delta_mem = replicas * mem
 
     click.echo(f"{delta_cpu=}m {delta_mem=}MiB")
+
+    constrained_resource = determine_constrained_resource(instance_data, cpu, mem)
+    click.echo(f"{constrained_resource=}")
+
+    if constrained_resource == "cpu":
+        resource_requirement = delta_cpu
+    else:
+        resource_requirement = delta_mem
+
+    required_instance_count = determine_instance_count_required(instance_data, constrained_resource, resource_requirement)
+    click.echo(f"{required_instance_count=}")
 
 if __name__ == "__main__":
     cli()
