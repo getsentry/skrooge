@@ -21,7 +21,7 @@ def cli():
 @click.option(
     "-c",
     "--cpu",
-    help="The amount of CPU change",
+    help="The amount of CPU change in milli-cores",
     type=click.INT,
 )
 @click.option(
@@ -34,22 +34,28 @@ def cli():
     "-i",
     "--instance",
     help="The instance type this deployment is running on",
+    required=True,
 )
 def estimate(replicas, cpu, mem, instance):
     "Quick estimate of the cost or savings a kubernetes scale update will incur"
     click.echo(f"{replicas=}")
-    click.echo(f"{cpu=}")
-    click.echo(f"{mem=}")
+    click.echo(f"{cpu=}m")
+    click.echo(f"{mem=}MiB")
     click.echo(f"{instance=}")
 
-    if instance is not None:
-        try:
-            click.echo(f"{instance_types[instance]=}")
-        except KeyError:
-            close_matches = difflib.get_close_matches(instance, instance_types.keys())
-            missing_instance_type_link = "https://github.com/getsentry/skrooge/issues/new?assignees=&labels=&projects=&template=BUG_REPORT.md"
-            raise click.BadParameter(f"{instance} not found. Did you mean: {', '.join(close_matches)}\nMissing? {missing_instance_type_link}")
+    try:
+        instance_data = instance_types[instance]
+    except KeyError:
+        close_matches = difflib.get_close_matches(instance, instance_types.keys())
+        missing_instance_type_link = "https://github.com/getsentry/skrooge/issues/new?assignees=&labels=&projects=&template=BUG_REPORT.md"
+        raise click.BadParameter(f"{instance} not found. Did you mean: {', '.join(close_matches)}\nMissing? {missing_instance_type_link}")
 
+    click.echo(f"{instance_data=}")
+
+    delta_cpu = replicas * cpu
+    delta_mem = replicas * mem
+
+    click.echo(f"{delta_cpu=}m {delta_mem=}MiB")
 
 if __name__ == "__main__":
     cli()
