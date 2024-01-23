@@ -24,3 +24,4 @@ skrooge = "skrooge.cli:cli"
 
 [project.optional-dependencies]
 test = ["pytest"]
+scrape = ["pandas", "requests", "lxml"]

@@ -62,10 +62,14 @@ To contribute to this tool, first checkout the code. Then create a new virtual e
     python -m venv venv
     source venv/bin/activate
 
-Now install the dependencies and test dependencies:
+Now install the dependencies, test dependencies, and GCP cost scraping dependencies:
 
-    pip install -e '.[test]'
+    pip install -e '.[test,scrape]'
 
 To run the tests:
 
     pytest
+
+To update the instances.json file:
+
+    python3 skrooge/scraper.py > skrooge/instances.json
