@@ -23,8 +23,9 @@ CI = "https://github.com/mwarkentin/skrooge/actions"
 skrooge = "skrooge.cli:cli"
 
 [project.optional-dependencies]
-test = ["pytest"]
+lint = ["ruff"]
 scrape = ["pandas", "requests", "lxml"]
+test = ["pytest", "pytest-cov"]
 
 [tool.ruff]
 exclude = ["skrooge/scraper.py"]
