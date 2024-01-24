@@ -26,5 +26,5 @@ skrooge = "skrooge.cli:cli"
 test = ["pytest"]
 scrape = ["pandas", "requests", "lxml"]
 
-[tool.ruff.format]
+[tool.ruff]
 exclude = ["skrooge/scraper.py"]
