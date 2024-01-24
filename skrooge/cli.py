@@ -100,6 +100,21 @@ def estimate(replicas, cpu, mem, instance):
     costs = calculate_cost(instance_data, required_instance_count)
     click.echo(costs)
 
+    data = {
+        "replicas": replicas,
+        "cpu": cpu,
+        "mem": mem,
+        "delta_cpu": delta_cpu,
+        "delta_mem": delta_mem,
+        "constrained_resource": constrained_resource,
+        "resource_requirement": resource_requirement,
+        "required_instance_count": required_instance_count,
+        "instance_specs": instance_data["specs"],
+        "costs": costs,
+    }
+
+    click.echo(f"{data=}")
+
 
 if __name__ == "__main__":
     cli()
