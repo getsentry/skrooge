@@ -1,5 +1,6 @@
 import difflib
 import json
+import os
 
 import click
 
@@ -46,7 +47,9 @@ def estimate(replicas, cpu, mem, instance):
 
     instance_family = instance.split("-")[0]
 
-    instance_data_path = 'skrooge/instances.json'
+    # Get the absolute path to the directory of the script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    instance_data_path = os.path.join(script_dir, "instances.json")
 
     with open(instance_data_path, 'r') as file:
         instance_types = json.load(file)
