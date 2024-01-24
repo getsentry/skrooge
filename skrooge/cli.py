@@ -4,7 +4,11 @@ import os
 
 import click
 
-from .utils import calculate_cost, determine_constrained_resource, determine_instance_count_required
+from .utils import (
+    calculate_cost,
+    determine_constrained_resource,
+    determine_instance_count_required,
+)
 
 
 @click.group()
@@ -51,7 +55,7 @@ def estimate(replicas, cpu, mem, instance):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     instance_data_path = os.path.join(script_dir, "instances.json")
 
-    with open(instance_data_path, 'r') as file:
+    with open(instance_data_path, "r") as file:
         instance_types = json.load(file)
 
     missing_instance_type_link = "https://github.com/getsentry/skrooge/issues/new?assignees=&labels=&projects=&template=BUG_REPORT.md"
@@ -60,12 +64,20 @@ def estimate(replicas, cpu, mem, instance):
         instance_data = instance_types[instance_family][instance]
     except KeyError:
         try:
-            close_matches = difflib.get_close_matches(instance, instance_types[instance_family].keys())
+            close_matches = difflib.get_close_matches(
+                instance, instance_types[instance_family].keys()
+            )
         except KeyError:
             click.echo(f"{instance_family}, {instance_types.keys()}")
-            close_matches = difflib.get_close_matches(instance_family, instance_types.keys(), cutoff=0.4)
-            raise click.BadParameter(f"{instance_family} instance family not found. Did you mean: {', '.join(close_matches)}\nMissing an instance family that exists? {missing_instance_type_link}")
-        raise click.BadParameter(f"{instance} not found. Did you mean: {', '.join(close_matches)}\nMissing an instance type that exists? {missing_instance_type_link}")
+            close_matches = difflib.get_close_matches(
+                instance_family, instance_types.keys(), cutoff=0.4
+            )
+            raise click.BadParameter(
+                f"{instance_family} instance family not found. Did you mean: {', '.join(close_matches)}\nMissing an instance family that exists? {missing_instance_type_link}"
+            )
+        raise click.BadParameter(
+            f"{instance} not found. Did you mean: {', '.join(close_matches)}\nMissing an instance type that exists? {missing_instance_type_link}"
+        )
 
     delta_cpu = replicas * cpu
     delta_mem = replicas * mem
@@ -80,11 +92,14 @@ def estimate(replicas, cpu, mem, instance):
     else:
         resource_requirement = delta_mem
 
-    required_instance_count = determine_instance_count_required(instance_data, constrained_resource, resource_requirement)
+    required_instance_count = determine_instance_count_required(
+        instance_data, constrained_resource, resource_requirement
+    )
     click.echo(f"{required_instance_count=}")
 
     costs = calculate_cost(instance_data, required_instance_count)
     click.echo(costs)
+
 
 if __name__ == "__main__":
     cli()
