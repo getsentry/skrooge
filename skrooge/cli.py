@@ -1,14 +1,20 @@
 import difflib
 import json
+import logging
 import os
 
 import click
+import click_log
 
+from .render import render
 from .utils import (
     calculate_cost,
     determine_constrained_resource,
     determine_instance_count_required,
 )
+
+logger = logging.getLogger(__name__)
+click_log.basic_config(logger)
 
 
 @click.group()
@@ -18,6 +24,7 @@ def cli():
 
 
 @cli.command(name="estimate")
+@click_log.simple_verbosity_option(logger, default="ERROR")
 @click.option(
     "-r",
     "--replicas",
@@ -42,12 +49,19 @@ def cli():
     help="The instance type this deployment is running on",
     required=True,
 )
-def estimate(replicas, cpu, mem, instance):
+@click.option(
+    "-f",
+    "--format",
+    help="The instance type this deployment is running on",
+    type=click.Choice(["english", "json"], case_sensitive=False),
+    default="english",
+)
+def estimate(replicas, cpu, mem, instance, format):
     "Quick estimate of the cost or savings a kubernetes scale update will incur"
-    click.echo(f"{replicas=}")
-    click.echo(f"{cpu=}m")
-    click.echo(f"{mem=}MiB")
-    click.echo(f"{instance=}")
+    logger.info(f"{replicas=}")
+    logger.info(f"{cpu=}m")
+    logger.info(f"{mem=}MiB")
+    logger.info(f"{instance=}")
 
     instance_family = instance.split("-")[0]
 
@@ -68,7 +82,7 @@ def estimate(replicas, cpu, mem, instance):
                 instance, instance_types[instance_family].keys()
             )
         except KeyError:
-            click.echo(f"{instance_family}, {instance_types.keys()}")
+            logger.info(f"{instance_family}, {instance_types.keys()}")
             close_matches = difflib.get_close_matches(
                 instance_family, instance_types.keys(), cutoff=0.4
             )
@@ -82,12 +96,12 @@ def estimate(replicas, cpu, mem, instance):
     delta_cpu = replicas * cpu
     delta_mem = replicas * mem
 
-    click.echo(f"{delta_cpu=}m {delta_mem=}MiB")
+    logger.info(f"{delta_cpu=}m {delta_mem=}MiB")
 
     constrained_resource = determine_constrained_resource(instance_data, cpu, mem)
-    click.echo(f"{constrained_resource=}")
+    logger.info(f"{constrained_resource=}")
 
-    if constrained_resource == "cpu":
+    if constrained_resource == "cores":
         resource_requirement = delta_cpu
     else:
         resource_requirement = delta_mem
@@ -95,10 +109,29 @@ def estimate(replicas, cpu, mem, instance):
     required_instance_count = determine_instance_count_required(
         instance_data, constrained_resource, resource_requirement
     )
-    click.echo(f"{required_instance_count=}")
+    logger.info(f"{required_instance_count=}")
 
     costs = calculate_cost(instance_data, required_instance_count)
-    click.echo(costs)
+    logger.info(costs)
+
+    data = {
+        "replicas": replicas,
+        "cpu": cpu,
+        "mem": mem,
+        "delta_cpu": delta_cpu,
+        "delta_mem": delta_mem,
+        "constrained_resource": constrained_resource,
+        "resource_requirement": resource_requirement,
+        "required_instance_count": required_instance_count,
+        "instance": instance,
+        "instance_family": instance_family,
+        "instance_specs": instance_data["specs"],
+        "costs": costs,
+    }
+
+    logger.info(f"{data=}")
+
+    render(format=format, data=data)
 
 
 if __name__ == "__main__":

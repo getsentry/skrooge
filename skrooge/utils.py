@@ -1,10 +1,9 @@
+import logging
 import math
-
-import click
 
 
 def determine_constrained_resource(instance_data, cpu, mem):
-    click.echo(
+    logging.info(
         f"Calculating constrained resource: {instance_data['specs']=}, {cpu=}, {mem=}"
     )
     if (
@@ -27,6 +26,8 @@ def determine_instance_count_required(
     resource_per_instance = (
         instance_data["specs"][constrained_resource] * normalization_factor
     )
+    logging.info(f"{resource_per_instance=}, {resource_requirement=}")
+    logging.info(f"{math.ceil(resource_requirement / resource_per_instance)=}")
     return math.ceil(resource_requirement / resource_per_instance)
 
 
@@ -35,8 +36,8 @@ def calculate_cost(
 ):
     hourly_cost = instance_data["regions"][region][cost_type] * instance_count
     costs = {
-        "hourly": hourly_cost,
-        "monthly": hourly_cost * 24 * 365 / 12,
-        "yearly": hourly_cost * 24 * 365,
+        "hourly": round(hourly_cost, 2),
+        "monthly": round(hourly_cost * 24 * 365 / 12),
+        "yearly": round(hourly_cost * 24 * 365),
     }
     return costs
