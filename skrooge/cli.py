@@ -87,7 +87,7 @@ def estimate(replicas, cpu, mem, instance):
     constrained_resource = determine_constrained_resource(instance_data, cpu, mem)
     click.echo(f"{constrained_resource=}")
 
-    if constrained_resource == "cpu":
+    if constrained_resource == "cores":
         resource_requirement = delta_cpu
     else:
         resource_requirement = delta_mem

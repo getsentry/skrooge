@@ -27,6 +27,8 @@ def determine_instance_count_required(
     resource_per_instance = (
         instance_data["specs"][constrained_resource] * normalization_factor
     )
+    click.echo(f"{resource_per_instance=}, {resource_requirement=}")
+    click.echo(f"{math.ceil(resource_requirement / resource_per_instance)=}")
     return math.ceil(resource_requirement / resource_per_instance)
 
 
