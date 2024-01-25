@@ -64,7 +64,7 @@ To contribute to this tool, first checkout the code. Then create a new virtual e
 
 Now install the dependencies, test dependencies, and GCP cost scraping dependencies:
 
-    pip install -e '.[test,scrape]'
+    pip install -e '.[lint,scrape,test]'
 
 To run the tests:
 
