@@ -13,13 +13,13 @@ def render(format, data):
 
 def render_english(data):
     click.echo(
-        f"This workload is running on {data['instance']} instances with {data['instance_specs']['cores']} cores and {data['instance_specs']['memory']}GiB of memory."
+        f"This workload is running on {data['instance']} instances in {data['region']} with {data['instance_specs']['cores']} cores and {data['instance_specs']['memory']}GiB of memory."
     )
     click.echo(
         f"This workload will require {data['delta_cpu'] / 1000} cores and {data['delta_mem'] / 1024} GiB of memory. This workload is {data['constrained_resource']}-constrained."
     )
     click.echo(
-        f"This workload will require {data['required_instance_count']} instances, costing ${data['costs']['hourly']}/h (or ${data['costs']['monthly']}/m (or ${data['costs']['yearly']}/y))"
+        f"This workload will require {data['required_instance_count']} instances, costing ${data['costs']['hourly']}/h (or ${data['costs']['monthly']}/m (or ${data['costs']['yearly']}/y)) at {data['cost_class']} rates."
     )
 
 
