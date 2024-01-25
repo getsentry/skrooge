@@ -32,9 +32,9 @@ def determine_instance_count_required(
 
 
 def calculate_cost(
-    instance_data, instance_count, region="us-central1", cost_type="ondemand"
+    instance_data, instance_count, region="us-central1", cost_class="sud"
 ):
-    hourly_cost = instance_data["regions"][region][cost_type] * instance_count
+    hourly_cost = instance_data["regions"][region][cost_class] * instance_count
     costs = {
         "hourly": round(hourly_cost, 2),
         "monthly": round(hourly_cost * 24 * 365 / 12),

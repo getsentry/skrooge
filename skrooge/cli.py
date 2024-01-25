@@ -50,13 +50,21 @@ def cli():
     required=True,
 )
 @click.option(
+    "--cost-class",
+    help="The type of cost to calculate. Default: sud",
+    type=click.Choice(
+        ["sud", "ondemand", "preemptible", "cud-1y", "cud-3y"], case_sensitive=False
+    ),
+    default="sud",
+)
+@click.option(
     "-f",
     "--format",
     help="The instance type this deployment is running on",
     type=click.Choice(["english", "json"], case_sensitive=False),
     default="english",
 )
-def estimate(replicas, cpu, mem, instance, format):
+def estimate(replicas, cpu, mem, instance, cost_class, format):
     "Quick estimate of the cost or savings a kubernetes scale update will incur"
     logger.info(f"{replicas=}")
     logger.info(f"{cpu=}m")
@@ -111,7 +119,9 @@ def estimate(replicas, cpu, mem, instance, format):
     )
     logger.info(f"{required_instance_count=}")
 
-    costs = calculate_cost(instance_data, required_instance_count)
+    costs = calculate_cost(
+        instance_data, required_instance_count, cost_class=cost_class
+    )
     logger.info(costs)
 
     data = {
