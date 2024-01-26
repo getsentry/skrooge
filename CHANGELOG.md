@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 -
 
+## [1.0.1] - 2024-01-26
+
+### Fixed
+
+- Include `skrooge/instances.json` in setuptools package-data for use after pip install
+
 ## [1.0.0] - 2024-01-26
 
 ### Added
@@ -38,5 +44,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial commit.
 
 [unreleased]: https://github.com/getsentry/skrooge/compare/1.0.0...HEAD
+[1.0.1]: https://github.com/getsentry/skrooge/compare/1.0.0...1.0.1
 [1.0.0]: https://github.com/getsentry/skrooge/compare/0.0.0...1.0.0
 [0.0.0]: https://github.com/getsentry/skrooge/releases/tag/0.0.0
