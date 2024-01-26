@@ -33,3 +33,6 @@ exclude = ["skrooge/scraper.py"]
 
 [tool.setuptools]
 packages = ["skrooge",]
+
+[tool.setuptools.package-data]
+'skrooge' = ['instances.json']
