@@ -30,3 +30,6 @@ test = ["pytest", "pytest-cov"]
 
 [tool.ruff]
 exclude = ["skrooge/scraper.py"]
+
+[tool.setuptools]
+packages = ["skrooge",]
