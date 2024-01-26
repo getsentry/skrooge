@@ -1,9 +1,7 @@
 name: Publish Python Package
 on:
   push:
-    branches: [ "main", "release/**" ]
-  pull_request:
-    branches: [ "main" ]
+    branches: [ "release/**" ]
 
 permissions:
   contents: read
@@ -49,5 +47,3 @@ jobs:
     - name: Build
       run: |
         python -m build
-    # - name: Publish
-    #   uses: pypa/gh-action-pypi-publish@release/v1
