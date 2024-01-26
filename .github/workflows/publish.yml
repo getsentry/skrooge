@@ -1,7 +1,7 @@
 name: Publish Python Package
 on:
   push:
-    branches: [ "release/**" ]
+    branches: [ "release/**", "gha-publish-upload-artifact" ]
 
 permissions:
   contents: read
@@ -47,3 +47,9 @@ jobs:
     - name: Build
       run: |
         python -m build
+    - name: Upload Python Packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ github.sha }}
+        path: |
+          dist/*
