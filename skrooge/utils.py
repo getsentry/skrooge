@@ -6,10 +6,9 @@ def determine_constrained_resource(instance_data, cpu, mem):
     logging.info(
         f"Calculating constrained resource: {instance_data['specs']=}, {cpu=}, {mem=}"
     )
-    if (
-        instance_data["specs"]["cores"] * 1000 / abs(cpu)
-        > instance_data["specs"]["memory"] * 1024 / abs(mem)
-    ):
+    if instance_data["specs"]["cores"] * 1000 / abs(cpu) > instance_data["specs"][
+        "memory"
+    ] * 1024 / abs(mem):
         return "memory"
     else:
         return "cores"

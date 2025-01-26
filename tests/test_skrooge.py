@@ -35,7 +35,20 @@ def test_invalid_instance_type_provides_github_bug_report_link():
 def test_treat_negative_cpu_and_mem_values_as_absolute():
     runner = CliRunner()
     with runner.isolated_filesystem():
-        result = runner.invoke(cli, ["estimate", "--instance", "n2-standard-32", "--replicas", 30, "--cpu", -2500, "--mem", -2024])
+        result = runner.invoke(
+            cli,
+            [
+                "estimate",
+                "--instance",
+                "n2-standard-32",
+                "--replicas",
+                30,
+                "--cpu",
+                -2500,
+                "--mem",
+                -2024,
+            ],
+        )
         assert result.exit_code == 0
 
         # whitespace prefix to check non-negative

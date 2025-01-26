@@ -321,11 +321,15 @@ def test_determine_constrained_resource_mem_bound():
         == "memory"
     )
 
+
 def test_determine_constrained_resource_normalize_negative_values_as_absolutes():
     assert (
-        determine_constrained_resource(c2_standard_30_instance_data, cpu=-10000, mem=-128)
+        determine_constrained_resource(
+            c2_standard_30_instance_data, cpu=-10000, mem=-128
+        )
         == "cores"
     )
+
 
 def test_determine_instance_count_required_minimum_of_one_cpu():
     assert (
