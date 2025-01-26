@@ -146,8 +146,8 @@ def estimate(replicas, cpu, mem, instance, cost_class, region, format):
             f"{instance} not found. Did you mean: {', '.join(close_matches)}\nMissing an instance type that exists? {missing_instance_type_link}"
         )
 
-    delta_cpu = replicas * cpu
-    delta_mem = replicas * mem
+    delta_cpu = replicas * abs(cpu)
+    delta_mem = replicas * abs(mem)
 
     logger.info(f"{delta_cpu=}m {delta_mem=}MiB")
 
