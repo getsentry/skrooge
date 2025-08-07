@@ -1,0 +1,44 @@
+name: Test Skrooge Actions
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-simple-action:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test skrooge-comment action
+        uses: ./.github/actions/skrooge-comment
+        with:
+          replicas: "2"
+          cpu: "1000"
+          mem: "2048"
+          instance: "c2-standard-30"
+          cost-class: "sud"
+          region: "us-central1"
+          format: "english"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          comment-prefix: "## 🧪 Test - Simple Action"
+
+  test-k8s-parser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test skrooge-k8s-parser action
+        uses: ./.github/actions/skrooge-k8s-parser
+        with:
+          manifest-path: "examples"
+          instance: "c2-standard-30"
+          cost-class: "sud"
+          region: "us-central1"
+          format: "english"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          comment-prefix: "## 🧪 Test - K8s Parser Action"

@@ -54,6 +54,48 @@ You can also use:
 
     python -m skrooge --help
 
+## GitHub Actions
+
+This repository includes reusable GitHub Actions that can be incorporated into other repositories to automatically run skrooge cost estimation and comment results on pull requests.
+
+### Available Actions
+
+1. **skrooge-comment**: Simple action that runs skrooge with provided parameters
+2. **skrooge-k8s-parser**: Advanced action that automatically parses Kubernetes manifests
+
+### Quick Start
+
+Add this to your repository's workflow:
+
+```yaml
+name: Cost Estimation
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  estimate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run skrooge cost estimation
+        uses: mwarkentin/skrooge/.github/actions/skrooge-comment@main
+        with:
+          replicas: '5'
+          cpu: '2000'
+          mem: '4096'
+          instance: 'c2-standard-30'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+For detailed documentation, see [.github/actions/README.md](.github/actions/README.md).
+
 ## Development
 
 To contribute to this tool, first checkout the code. Then create a new virtual environment:

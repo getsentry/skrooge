@@ -1,0 +1,183 @@
+name: "Skrooge K8s Manifest Parser"
+description: "Parse Kubernetes manifests and run skrooge cost estimation"
+
+inputs:
+  manifest-path:
+    description: "Path to Kubernetes manifest file(s)"
+    required: false
+    default: "."
+  instance:
+    description: "Instance type this deployment is running on"
+    required: true
+  cost-class:
+    description: "Type of cost to calculate"
+    required: false
+    default: "sud"
+  region:
+    description: "Region to use for cost calculation"
+    required: false
+    default: "us-central1"
+  format:
+    description: "Output format (english or json)"
+    required: false
+    default: "english"
+  github-token:
+    description: "GitHub token for commenting on PRs"
+    required: true
+  comment-prefix:
+    description: "Prefix for the comment"
+    required: false
+    default: "## 💰 Kubernetes Cost Analysis"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.8"
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        pip install skrooge pyyaml
+
+    - name: Parse Kubernetes manifests
+      id: parse-manifests
+      shell: bash
+      run: |
+        python -c "
+        import yaml
+        import os
+        import glob
+        import json
+
+        def parse_manifests(path):
+            total_cpu = 0
+            total_mem = 0
+            total_replicas = 0
+
+            # Find all yaml/yml files
+            yaml_files = glob.glob(os.path.join(path, '**/*.yaml'), recursive=True) + \
+                        glob.glob(os.path.join(path, '**/*.yml'), recursive=True)
+
+            for file_path in yaml_files:
+                try:
+                    with open(file_path, 'r') as f:
+                        docs = list(yaml.safe_load_all(f))
+
+                    for doc in docs:
+                        if doc and isinstance(doc, dict):
+                            # Handle Deployment
+                            if doc.get('kind') == 'Deployment':
+                                replicas = doc.get('spec', {}).get('replicas', 1)
+                                total_replicas += replicas
+
+                                containers = doc.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [])
+                                for container in containers:
+                                    resources = container.get('resources', {})
+                                    requests = resources.get('requests', {})
+
+                                    # Parse CPU (convert to milli-cores)
+                                    cpu_str = requests.get('cpu', '0')
+                                    if cpu_str.endswith('m'):
+                                        cpu = int(cpu_str[:-1])
+                                    else:
+                                        cpu = int(float(cpu_str) * 1000)
+                                    total_cpu += cpu * replicas
+
+                                    # Parse memory (convert to MiB)
+                                    mem_str = requests.get('memory', '0')
+                                    if mem_str.endswith('Mi'):
+                                        mem = int(mem_str[:-2])
+                                    elif mem_str.endswith('Gi'):
+                                        mem = int(float(mem_str[:-2]) * 1024)
+                                    else:
+                                        mem = int(mem_str) // (1024 * 1024)  # Assume bytes
+                                    total_mem += mem * replicas
+
+                            # Handle StatefulSet
+                            elif doc.get('kind') == 'StatefulSet':
+                                replicas = doc.get('spec', {}).get('replicas', 1)
+                                total_replicas += replicas
+
+                                containers = doc.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [])
+                                for container in containers:
+                                    resources = container.get('resources', {})
+                                    requests = resources.get('requests', {})
+
+                                    cpu_str = requests.get('cpu', '0')
+                                    if cpu_str.endswith('m'):
+                                        cpu = int(cpu_str[:-1])
+                                    else:
+                                        cpu = int(float(cpu_str) * 1000)
+                                    total_cpu += cpu * replicas
+
+                                    mem_str = requests.get('memory', '0')
+                                    if mem_str.endswith('Mi'):
+                                        mem = int(mem_str[:-2])
+                                    elif mem_str.endswith('Gi'):
+                                        mem = int(float(mem_str[:-2]) * 1024)
+                                    else:
+                                        mem = int(mem_str) // (1024 * 1024)
+                                    total_mem += mem * replicas
+
+                except Exception as e:
+                    print(f'Error parsing {file_path}: {e}')
+
+            return {
+                'cpu': total_cpu,
+                'mem': total_mem,
+                'replicas': total_replicas
+            }
+
+        result = parse_manifests('${{ inputs.manifest-path }}')
+        print(f'::set-output name=cpu::{result[\"cpu\"]}')
+        print(f'::set-output name=mem::{result[\"mem\"]}')
+        print(f'::set-output name=replicas::{result[\"replicas\"]}')
+        print(f'Parsed resources: CPU={result[\"cpu\"]}m, Memory={result[\"mem\"]}Mi, Replicas={result[\"replicas\"]}')
+        "
+
+    - name: Run skrooge estimate
+      id: skrooge-output
+      shell: bash
+      run: |
+        OUTPUT=$(skrooge estimate \
+          --replicas ${{ steps.parse-manifests.outputs.replicas }} \
+          --cpu ${{ steps.parse-manifests.outputs.cpu }} \
+          --mem ${{ steps.parse-manifests.outputs.mem }} \
+          --instance ${{ inputs.instance }} \
+          --cost-class ${{ inputs.cost-class }} \
+          --region ${{ inputs.region }} \
+          --format ${{ inputs.format }})
+        echo "output<<EOF" >> $GITHUB_OUTPUT
+        echo "$OUTPUT" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Comment on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const output = `${{ steps.skrooge-output.outputs.output }}`;
+          const resources = `CPU: ${{ steps.parse-manifests.outputs.cpu }}m, Memory: ${{ steps.parse-manifests.outputs.mem }}Mi, Replicas: ${{ steps.parse-manifests.outputs.replicas }}`;
+          const comment = `${{ inputs.comment-prefix }}
+
+          **Resources Detected:**
+          \`\`\`
+          ${resources}
+          \`\`\`
+
+          **Cost Estimate:**
+          \`\`\`
+          ${output}
+          \`\`\`
+
+          *Generated by [skrooge](https://github.com/mwarkentin/skrooge) - A Kubernetes cost estimator*`;
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
