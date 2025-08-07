@@ -28,7 +28,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run skrooge cost estimation
-        uses: mwarkentin/skrooge/.github/actions/skrooge-comment@main
+        uses: getsentry/skrooge/.github/actions/skrooge-comment@main
         with:
           replicas: '5'
           cpu: '2000'
@@ -81,7 +81,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Analyze Kubernetes manifests and estimate costs
-        uses: mwarkentin/skrooge/.github/actions/skrooge-k8s-parser@main
+        uses: getsentry/skrooge/.github/actions/skrooge-k8s-parser@main
         with:
           manifest-path: '.'
           instance: 'c2-standard-30'

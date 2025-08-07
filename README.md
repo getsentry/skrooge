@@ -85,7 +85,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run skrooge cost estimation
-        uses: mwarkentin/skrooge/.github/actions/skrooge-comment@main
+        uses: getsentry/skrooge/.github/actions/skrooge-comment@main
         with:
           replicas: '5'
           cpu: '2000'
