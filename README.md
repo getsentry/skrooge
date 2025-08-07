@@ -1,9 +1,9 @@
 # skrooge
 
 [![PyPI](https://img.shields.io/pypi/v/skrooge.svg)](https://pypi.org/project/skrooge/)
-[![Changelog](https://img.shields.io/github/v/release/mwarkentin/skrooge?include_prereleases&label=changelog)](https://github.com/mwarkentin/skrooge/releases)
-[![Tests](https://github.com/mwarkentin/skrooge/workflows/Test/badge.svg)](https://github.com/mwarkentin/skrooge/actions?query=workflow%3ATest)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/mwarkentin/skrooge/blob/master/LICENSE)
+[![Changelog](https://img.shields.io/github/v/release/getsentry/skrooge?include_prereleases&label=changelog)](https://github.com/getsentry/skrooge/releases)
+[![Tests](https://github.com/getsentry/skrooge/workflows/Test/badge.svg)](https://github.com/getsentry/skrooge/actions?query=workflow%3ATest)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/getsentry/skrooge/blob/master/LICENSE)
 
 A quick and dirty kubernetes cost estimator
 

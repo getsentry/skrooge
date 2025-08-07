@@ -15,10 +15,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/mwarkentin/skrooge"
-Changelog = "https://github.com/mwarkentin/skrooge/releases"
-Issues = "https://github.com/mwarkentin/skrooge/issues"
-CI = "https://github.com/mwarkentin/skrooge/actions"
+Homepage = "https://github.com/getsentry/skrooge"
+Changelog = "https://github.com/getsentry/skrooge/releases"
+Issues = "https://github.com/getsentry/skrooge/issues"
+CI = "https://github.com/getsentry/skrooge/actions"
 
 [project.entry-points.console_scripts]
 skrooge = "skrooge.cli:cli"
