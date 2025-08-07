@@ -42,3 +42,22 @@ jobs:
           format: "english"
           github-token: ${{ secrets.GITHUB_TOKEN }}
           comment-prefix: "## 🧪 Test - K8s Parser Action"
+
+  test-diff-analyzer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Needed for git diff analysis
+
+      - name: Test skrooge-diff-analyzer action
+        uses: ./.github/actions/skrooge-diff-analyzer
+        with:
+          manifest-path: "examples"
+          instance: "c2-standard-30"
+          cost-class: "sud"
+          region: "us-central1"
+          format: "english"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          comment-prefix: "## 🧪 Test - Diff Analyzer Action"
