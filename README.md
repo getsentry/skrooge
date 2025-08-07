@@ -62,6 +62,7 @@ This repository includes reusable GitHub Actions that can be incorporated into o
 
 1. **skrooge-comment**: Simple action that runs skrooge with provided parameters
 2. **skrooge-k8s-parser**: Advanced action that automatically parses Kubernetes manifests
+3. **skrooge-diff-analyzer**: Specialized action for large repositories that analyzes only changed files and provides before/after cost comparisons
 
 ### Quick Start
 
