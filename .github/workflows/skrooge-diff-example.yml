@@ -1,0 +1,32 @@
+name: Skrooge Diff Analysis
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "k8s/materialized_manifests/**/*.yaml"
+      - "k8s/materialized_manifests/**/*.yml"
+
+jobs:
+  analyze-cost-impact:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Needed for git diff analysis
+
+      - name: Analyze cost impact of changes
+        uses: ./.github/actions/skrooge-diff-analyzer
+        with:
+          manifest-path: "k8s/materialized_manifests"
+          instance: "c2-standard-30"
+          cost-class: "sud"
+          region: "us-central1"
+          format: "english"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          comment-prefix: "## 💰 Kubernetes Cost Impact Analysis"
