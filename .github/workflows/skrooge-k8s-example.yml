@@ -1,0 +1,36 @@
+name: Skrooge K8s Manifest Analysis
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "**/deployment.yaml"
+      - "**/deployment.yml"
+      - "**/statefulset.yaml"
+      - "**/statefulset.yml"
+      - "**/kustomization.yaml"
+      - "**/kustomization.yml"
+      - "**/values.yaml"
+      - "**/values.yml"
+
+jobs:
+  analyze-k8s-costs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Analyze Kubernetes manifests and estimate costs
+        uses: ./.github/actions/skrooge-k8s-parser
+        with:
+          manifest-path: "."
+          instance: "c2-standard-30"
+          cost-class: "sud"
+          region: "us-central1"
+          format: "english"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          comment-prefix: "## 💰 Kubernetes Cost Analysis"

@@ -1,0 +1,36 @@
+name: Skrooge Cost Estimation Example
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "**/deployment.yaml"
+      - "**/deployment.yml"
+      - "**/kustomization.yaml"
+      - "**/kustomization.yml"
+      - "**/values.yaml"
+      - "**/values.yml"
+
+jobs:
+  estimate-costs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run skrooge cost estimation
+        uses: ./.github/actions/skrooge-comment
+        with:
+          replicas: "5"
+          cpu: "2000"
+          mem: "4096"
+          instance: "c2-standard-30"
+          cost-class: "sud"
+          region: "us-central1"
+          format: "english"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          comment-prefix: "## 💰 Deployment Cost Estimate"
