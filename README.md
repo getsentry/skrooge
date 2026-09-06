@@ -46,13 +46,48 @@ Install this tool using `pip`:
 
 ## Usage
 
-For help, run:
+Run `skrooge --help` to see the available commands:
 
-    skrooge --help
+```text
+Usage: skrooge [OPTIONS] COMMAND [ARGS]...
 
-You can also use:
+  A quick and dirty kubernetes cost estimator
 
-    python -m skrooge --help
+Options:
+  --version  Show the version and exit.
+  --help     Show this message and exit.
+
+Commands:
+  estimate  Quick estimate of the cost or savings a kubernetes scale...
+```
+
+The `estimate` command accepts the following options:
+
+```text
+Usage: skrooge estimate [OPTIONS]
+
+  Quick estimate of the cost or savings a kubernetes scale update will incur
+
+Options:
+  -v, --verbosity LVL             Either CRITICAL, ERROR, WARNING, INFO or
+                                  DEBUG
+  -r, --replicas INTEGER          The number of replicas in the deployment
+  -c, --cpu INTEGER               The amount of CPU change in milli-cores
+  -m, --mem INTEGER               The amount of memory change in MiB
+  -i, --instance TEXT             The instance type this deployment is running
+                                  on  [required]
+  --cost-class [sud|ondemand|preemptible|cud-1y|cud-3y]
+                                  The type of cost to calculate. Default: sud
+  --region [asia-east1|asia-east2|asia-northeast1|asia-northeast2|asia-northeast3|asia-south1|asia-south2|asia-southeast1|asia-southeast2|australia-southeast1|australia-southeast2|europe-central2|europe-north1|europe-southwest1|europe-west1|europe-west2|europe-west3|europe-west4|europe-west6|europe-west8|europe-west9|northamerica-northeast1|northamerica-northeast2|southamerica-east1|southamerica-west1|us-central1|us-central2|us-east1|us-east4|us-east5|us-south1|us-west1|us-west2|us-west3|us-west4]
+                                  The region to use for cost calculation.
+                                  Default: us-central1
+  -f, --format [english|json]     The instance type this deployment is running
+                                  on
+  --help                          Show this message and exit.
+```
+
+You can also invoke the CLI as a Python module, for example
+`python -m skrooge --help`.
 
 ## Development
 
