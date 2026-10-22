@@ -40,7 +40,11 @@ Cost: $1828 / month ($21,936 / year)
 
 ## Installation
 
-skrooge requires Python 3.11 or newer. Install it as a standalone tool using [`uv`](https://docs.astral.sh/uv/):
+skrooge requires Python 3.11 or newer. The quickest way to use it is to run it with [`uvx`](https://docs.astral.sh/uv/guides/tools/), which fetches and runs the latest release without installing it:
+
+    uvx --from skrooge skrooge --help
+
+To install it as a standalone tool instead, use `uv`:
 
     uv tool install skrooge
 
@@ -51,22 +55,23 @@ Or with `pipx` or `pip`:
 
 ## Usage
 
-Estimate the cost of adding 2.5 cores and 2024MiB of memory to each of 30 replicas running on `n2-standard-32` nodes:
+Estimate the cost of adding 5.81 cores and 9950MiB of memory to each of 1000 replicas running on `n2-highcpu-64` nodes:
 
-    $ skrooge estimate --instance n2-standard-32 --replicas 30 --cpu 2500 --mem 2024
-    This workload is running on n2-standard-32 instances in us-central1 with 32 cores and 128GiB of memory.
-    This workload will require 75.0 cores and 59.296875 GiB of memory. This workload is cores-constrained.
-    This workload will require 3 instances, costing $3.73/h (or $2722/m (or $32669/y)) at sud rates.
+    $ uvx --from skrooge skrooge estimate --replicas 1000 --cpu 5810 --mem 9950 --instance n2-highcpu-64
+    This workload is running on n2-highcpu-64 instances in us-central1 with 64 cores and 64GiB of memory.
+    This workload will require 5810.0 cores and 9716.796875 GiB of memory. This workload is memory-constrained.
+    This workload will require 152 instances, costing $278.98/h (or $203658/m (or $2443898/y)) at sud rates.
 
-Use `--region`, `--cost-class`, and `--format json` to change the region, pricing tier, and output format.
+Use `--region`, `--cost-class`, and `--format json` to change the region, pricing tier, and output format:
+
+    uvx --from skrooge skrooge estimate --replicas 1000 --cpu 5810 --mem 9950 --instance n2-highcpu-64 --region europe-west1 --cost-class cud-1y --format json
+
+If you installed skrooge, drop the `uvx --from skrooge` prefix and run `skrooge` directly (or `python -m skrooge`).
 
 For help, run:
 
-    skrooge --help
-
-You can also use:
-
-    python -m skrooge --help
+    uvx --from skrooge skrooge --help
+    uvx --from skrooge skrooge estimate --help
 
 ## Development
 
