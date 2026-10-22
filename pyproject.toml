@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "skrooge"
-version = "1.0.2"
+version = "1.1.0"
 description = "A quick and dirty kubernetes cost estimator"
 readme = "README.md"
 authors = [{name = "Michael Warkentin"}]
