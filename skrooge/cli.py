@@ -1,7 +1,7 @@
 import difflib
 import json
 import logging
-import os
+from importlib.resources import files
 
 import click
 import click_log
@@ -14,7 +14,9 @@ from .utils import (
 )
 
 logger = logging.getLogger(__name__)
-click_log.basic_config(logger)
+# Configure the package logger so --verbosity also covers skrooge.utils
+package_logger = logging.getLogger("skrooge")
+click_log.basic_config(package_logger)
 
 
 @click.group()
@@ -24,7 +26,7 @@ def cli():
 
 
 @cli.command(name="estimate")
-@click_log.simple_verbosity_option(logger, default="ERROR")
+@click_log.simple_verbosity_option(package_logger, default="ERROR")
 @click.option(
     "-r",
     "--replicas",
@@ -105,7 +107,7 @@ def cli():
 @click.option(
     "-f",
     "--format",
-    help="The instance type this deployment is running on",
+    help="The output format. Default: english",
     type=click.Choice(["english", "json"], case_sensitive=False),
     default="english",
 )
@@ -118,12 +120,9 @@ def estimate(replicas, cpu, mem, instance, cost_class, region, format):
 
     instance_family = instance.split("-")[0]
 
-    # Get the absolute path to the directory of the script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    instance_data_path = os.path.join(script_dir, "instances.json")
-
-    with open(instance_data_path, "r") as file:
-        instance_types = json.load(file)
+    instance_types = json.loads(
+        files("skrooge").joinpath("instances.json").read_text(encoding="utf-8")
+    )
 
     missing_instance_type_link = "https://github.com/getsentry/skrooge/issues/new?assignees=&labels=&projects=&template=BUG_REPORT.md"
 
@@ -141,10 +140,10 @@ def estimate(replicas, cpu, mem, instance, cost_class, region, format):
             )
             raise click.BadParameter(
                 f"{instance_family} instance family not found. Did you mean: {', '.join(close_matches)}\nMissing an instance family that exists? {missing_instance_type_link}"
-            )
+            ) from None
         raise click.BadParameter(
             f"{instance} not found. Did you mean: {', '.join(close_matches)}\nMissing an instance type that exists? {missing_instance_type_link}"
-        )
+        ) from None
 
     delta_cpu = replicas * abs(cpu)
     delta_mem = replicas * abs(mem)

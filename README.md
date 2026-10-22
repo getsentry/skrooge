@@ -2,8 +2,8 @@
 
 [![PyPI](https://img.shields.io/pypi/v/skrooge.svg)](https://pypi.org/project/skrooge/)
 [![Changelog](https://img.shields.io/github/v/release/getsentry/skrooge?include_prereleases&label=changelog)](https://github.com/getsentry/skrooge/releases)
-[![Tests](https://github.com/getsentry/skrooge/workflows/Test/badge.svg)](https://github.com/getsentry/skrooge/actions?query=workflow%3ATest)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/getsentry/skrooge/blob/master/LICENSE)
+[![Tests](https://github.com/getsentry/skrooge/actions/workflows/python-package.yml/badge.svg)](https://github.com/getsentry/skrooge/actions/workflows/python-package.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/getsentry/skrooge/blob/main/LICENSE)
 
 A quick and dirty kubernetes cost estimator
 
@@ -40,36 +40,60 @@ Cost: $1828 / month ($21,936 / year)
 
 ## Installation
 
-Install this tool using `pip`:
+skrooge requires Python 3.11 or newer. The quickest way to use it is to run it with [`uvx`](https://docs.astral.sh/uv/guides/tools/), which fetches and runs the latest release without installing it:
 
+    uvx skrooge --help
+
+To install it as a standalone tool instead, use `uv`:
+
+    uv tool install skrooge
+
+Or with `pipx` or `pip`:
+
+    pipx install skrooge
     pip install skrooge
 
 ## Usage
 
+Estimate the cost of adding 5.81 cores and 9950MiB of memory to each of 1000 replicas running on `n2-highcpu-64` nodes:
+
+    $ uvx skrooge estimate --replicas 1000 --cpu 5810 --mem 9950 --instance n2-highcpu-64
+    This workload is running on n2-highcpu-64 instances in us-central1 with 64 cores and 64GiB of memory.
+    This workload will require 5810.0 cores and 9716.796875 GiB of memory. This workload is memory-constrained.
+    This workload will require 152 instances, costing $278.98/h (or $203658/m (or $2443898/y)) at sud rates.
+
+Use `--region`, `--cost-class`, and `--format json` to change the region, pricing tier, and output format:
+
+    uvx skrooge estimate --replicas 1000 --cpu 5810 --mem 9950 --instance n2-highcpu-64 --region europe-west1 --cost-class cud-1y --format json
+
+If you installed skrooge, drop the `uvx` prefix and run `skrooge` directly (or `python -m skrooge`).
+
 For help, run:
 
-    skrooge --help
-
-You can also use:
-
-    python -m skrooge --help
+    uvx skrooge --help
+    uvx skrooge estimate --help
 
 ## Development
 
-To contribute to this tool, first checkout the code. Then create a new virtual environment:
+This project uses [`uv`](https://docs.astral.sh/uv/) to manage its environment. To contribute, check out the code and install the dependencies:
 
     cd skrooge
-    python -m venv venv
-    source venv/bin/activate
-
-Now install the dependencies, test dependencies, and GCP cost scraping dependencies:
-
-    pip install -e '.[lint,scrape,test]'
+    uv sync
 
 To run the tests:
 
-    pytest
+    uv run pytest
+
+To lint and format:
+
+    uv run ruff check .
+    uv run ruff format .
+
+To run the same checks automatically on each commit, install the [pre-commit](https://pre-commit.com/) hooks:
+
+    uv tool install pre-commit
+    pre-commit install
 
 To update the instances.json file:
 
-    python3 skrooge/scraper.py > skrooge/instances.json
+    uv run --group scrape python skrooge/scraper.py > skrooge/instances.json

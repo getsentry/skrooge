@@ -7,23 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.1.0] - YYYY-MM-DD
-
-### Added
-
--
-
 ### Fixed
 
--
+- `--verbosity` now also shows log output from the cost calculation functions
+- Correct the `--format` help text
 
 ### Changed
 
--
+- Require Python 3.11 or newer; Python 3.8, 3.9, and 3.10 are no longer supported
+- Build with `uv_build` and manage development with `uv`
 
 ### Removed
 
--
+- Remove the `lint`, `test`, and `scrape` extras in favour of `dev` and `scrape` dependency groups
 
 ## [1.0.2] - 2024-01-26
 
