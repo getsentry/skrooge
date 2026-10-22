@@ -1,6 +1,8 @@
 import difflib
+import functools
 import json
 import logging
+import re
 from importlib.resources import files
 
 import click
@@ -18,6 +20,33 @@ logger = logging.getLogger(__name__)
 package_logger = logging.getLogger("skrooge")
 click_log.basic_config(package_logger)
 
+COST_CLASSES = ["sud", "ondemand", "preemptible", "cud-1y", "cud-3y"]
+
+
+@functools.cache
+def load_instance_types():
+    return json.loads(
+        files("skrooge").joinpath("instances.json").read_text(encoding="utf-8")
+    )
+
+
+def available_regions():
+    # Skip aggregate pricing keys such as "us" or "asia-east"; GCP regions end in a digit
+    return sorted(
+        {
+            region
+            for family in load_instance_types().values()
+            for instance_data in family.values()
+            if instance_data
+            for region in instance_data.get("regions", {})
+            if region[-1].isdigit()
+        },
+        # Natural sort, so europe-west2 comes before europe-west10
+        key=lambda region: [
+            int(part) if part.isdigit() else part for part in re.split(r"(\d+)", region)
+        ],
+    )
+
 
 @click.group()
 @click.version_option()
@@ -31,19 +60,22 @@ def cli():
     "-r",
     "--replicas",
     help="The number of replicas in the deployment",
-    type=click.INT,
+    type=click.IntRange(min=1),
+    required=True,
 )
 @click.option(
     "-c",
     "--cpu",
     help="The amount of CPU change in milli-cores",
     type=click.INT,
+    required=True,
 )
 @click.option(
     "-m",
     "--mem",
     help="The amount of memory change in MiB",
     type=click.INT,
+    required=True,
 )
 @click.option(
     "-i",
@@ -54,54 +86,13 @@ def cli():
 @click.option(
     "--cost-class",
     help="The type of cost to calculate. Default: sud",
-    type=click.Choice(
-        ["sud", "ondemand", "preemptible", "cud-1y", "cud-3y"], case_sensitive=False
-    ),
+    type=click.Choice(COST_CLASSES, case_sensitive=False),
     default="sud",
 )
 @click.option(
     "--region",
     help="The region to use for cost calculation. Default: us-central1",
-    type=click.Choice(
-        [
-            "asia-east1",
-            "asia-east2",
-            "asia-northeast1",
-            "asia-northeast2",
-            "asia-northeast3",
-            "asia-south1",
-            "asia-south2",
-            "asia-southeast1",
-            "asia-southeast2",
-            "australia-southeast1",
-            "australia-southeast2",
-            "europe-central2",
-            "europe-north1",
-            "europe-southwest1",
-            "europe-west1",
-            "europe-west2",
-            "europe-west3",
-            "europe-west4",
-            "europe-west6",
-            "europe-west8",
-            "europe-west9",
-            "northamerica-northeast1",
-            "northamerica-northeast2",
-            "southamerica-east1",
-            "southamerica-west1",
-            "us-central1",
-            "us-central2",
-            "us-east1",
-            "us-east4",
-            "us-east5",
-            "us-south1",
-            "us-west1",
-            "us-west2",
-            "us-west3",
-            "us-west4",
-        ],
-        case_sensitive=False,
-    ),
+    type=click.Choice(available_regions(), case_sensitive=False),
     default="us-central1",
 )
 @click.option(
@@ -120,9 +111,7 @@ def estimate(replicas, cpu, mem, instance, cost_class, region, format):
 
     instance_family = instance.split("-")[0]
 
-    instance_types = json.loads(
-        files("skrooge").joinpath("instances.json").read_text(encoding="utf-8")
-    )
+    instance_types = load_instance_types()
 
     missing_instance_type_link = "https://github.com/getsentry/skrooge/issues/new?assignees=&labels=&projects=&template=BUG_REPORT.md"
 
@@ -144,6 +133,40 @@ def estimate(replicas, cpu, mem, instance, cost_class, region, format):
         raise click.BadParameter(
             f"{instance} not found. Did you mean: {', '.join(close_matches)}\nMissing an instance type that exists? {missing_instance_type_link}"
         ) from None
+
+    if not all(
+        isinstance(instance_data["specs"][resource], (int, float))
+        for resource in ("cores", "memory")
+    ):
+        raise click.BadParameter(
+            f"{instance} is a shared-core instance type without a fixed number of cores, so skrooge can't estimate it."
+        )
+
+    if cpu == 0 and mem == 0:
+        raise click.BadParameter("--cpu and --mem can't both be 0.")
+
+    prices = instance_data["regions"].get(region, {})
+    if cost_class not in prices:
+        regions_with_pricing = [
+            r
+            for r, p in instance_data["regions"].items()
+            if cost_class in p and r[-1].isdigit()
+        ]
+        suggestions = []
+        if prices:
+            suggestions.append(
+                f"Cost classes available for {instance} in {region}: {', '.join(c for c in COST_CLASSES if c in prices)}"
+            )
+        close_matches = difflib.get_close_matches(region, regions_with_pricing)
+        if close_matches:
+            suggestions.append(
+                f"Similar regions with {cost_class} pricing for {instance}: {', '.join(close_matches)}"
+            )
+        raise click.BadParameter(
+            "\n".join(
+                [f"No {cost_class} pricing for {instance} in {region}.", *suggestions]
+            )
+        )
 
     delta_cpu = replicas * abs(cpu)
     delta_mem = replicas * abs(mem)

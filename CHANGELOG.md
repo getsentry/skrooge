@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `estimate` no longer crashes with a traceback when:
+  - `--replicas`, `--cpu`, or `--mem` is missing (they're now required, and `--replicas` must be at least 1)
+  - the chosen region or cost class has no pricing for the instance type; the error lists the cost classes and similar regions that do
+  - `--cpu` or `--mem` is 0, or the instance type is a shared-core type (`f1-micro`, `g1-small`)
+- `--region` choices now come from the bundled pricing data, which removes `us-central2` (no pricing) and adds `africa-south1`, `europe-west10`, `europe-west12`, `me-central1`, `me-central2`, and `me-west1`
 - `--verbosity` now also shows log output from the cost calculation functions
 - Correct the `--format` help text
 

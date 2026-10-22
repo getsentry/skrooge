@@ -74,7 +74,7 @@ uv run --group scrape python skrooge/scraper.py > skrooge/instances.json
 
 The codebase follows a simple three-module pattern:
 
-- **`cli.py`**: Defines the Click CLI group and `estimate` command. Loads `instances.json`, validates instance types with fuzzy matching (`difflib`), and orchestrates the calculation pipeline.
+- **`cli.py`**: Defines the Click CLI group and `estimate` command. Loads `instances.json` (cached by `load_instance_types()`), derives the `--region` choices from it, validates the instance type (with fuzzy matching via `difflib`) and that the chosen region and cost class have pricing, and orchestrates the calculation pipeline. Not every instance type has every cost class in every region, so never index pricing without checking.
 - **`utils.py`**: Pure calculation functions:
   - `determine_constrained_resource()` — determines if CPU or memory is the limiting factor
   - `determine_instance_count_required()` — calculates how many instances are needed
