@@ -42,7 +42,7 @@ Cost: $1828 / month ($21,936 / year)
 
 skrooge requires Python 3.11 or newer. The quickest way to use it is to run it with [`uvx`](https://docs.astral.sh/uv/guides/tools/), which fetches and runs the latest release without installing it:
 
-    uvx --from skrooge skrooge --help
+    uvx skrooge --help
 
 To install it as a standalone tool instead, use `uv`:
 
@@ -57,21 +57,21 @@ Or with `pipx` or `pip`:
 
 Estimate the cost of adding 5.81 cores and 9950MiB of memory to each of 1000 replicas running on `n2-highcpu-64` nodes:
 
-    $ uvx --from skrooge skrooge estimate --replicas 1000 --cpu 5810 --mem 9950 --instance n2-highcpu-64
+    $ uvx skrooge estimate --replicas 1000 --cpu 5810 --mem 9950 --instance n2-highcpu-64
     This workload is running on n2-highcpu-64 instances in us-central1 with 64 cores and 64GiB of memory.
     This workload will require 5810.0 cores and 9716.796875 GiB of memory. This workload is memory-constrained.
     This workload will require 152 instances, costing $278.98/h (or $203658/m (or $2443898/y)) at sud rates.
 
 Use `--region`, `--cost-class`, and `--format json` to change the region, pricing tier, and output format:
 
-    uvx --from skrooge skrooge estimate --replicas 1000 --cpu 5810 --mem 9950 --instance n2-highcpu-64 --region europe-west1 --cost-class cud-1y --format json
+    uvx skrooge estimate --replicas 1000 --cpu 5810 --mem 9950 --instance n2-highcpu-64 --region europe-west1 --cost-class cud-1y --format json
 
-If you installed skrooge, drop the `uvx --from skrooge` prefix and run `skrooge` directly (or `python -m skrooge`).
+If you installed skrooge, drop the `uvx` prefix and run `skrooge` directly (or `python -m skrooge`).
 
 For help, run:
 
-    uvx --from skrooge skrooge --help
-    uvx --from skrooge skrooge estimate --help
+    uvx skrooge --help
+    uvx skrooge estimate --help
 
 ## Development
 
