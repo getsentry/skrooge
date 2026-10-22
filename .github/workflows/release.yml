@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Version to release (or "auto")
+        description: Version to release, e.g. 1.1.0 ("auto" and bump keywords need a newer minVersion in .craft.yml)
         required: false
       force:
         description: Force a release even when there are release-blockers
