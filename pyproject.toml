@@ -1,17 +1,29 @@
+[build-system]
+requires = ["uv_build>=0.13.5,<0.14"]
+build-backend = "uv_build"
+
 [project]
 name = "skrooge"
-version = "0.1"
+version = "1.0.2"
 description = "A quick and dirty kubernetes cost estimator"
 readme = "README.md"
 authors = [{name = "Michael Warkentin"}]
-license = {text = "Apache-2.0"}
-requires-python = ">=3.8"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
 classifiers = [
-    "License :: OSI Approved :: Apache Software License"
+    "Environment :: Console",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
 ]
 dependencies = [
-    "click",
-    "click-log",
+    "click>=8.1",
+    "click-log>=0.4",
 ]
 
 [project.urls]
@@ -20,19 +32,36 @@ Changelog = "https://github.com/getsentry/skrooge/releases"
 Issues = "https://github.com/getsentry/skrooge/issues"
 CI = "https://github.com/getsentry/skrooge/actions"
 
-[project.entry-points.console_scripts]
+[project.scripts]
 skrooge = "skrooge.cli:cli"
 
-[project.optional-dependencies]
-lint = ["ruff"]
-scrape = ["pandas", "requests", "lxml"]
-test = ["pytest", "pytest-cov"]
+[dependency-groups]
+dev = [
+    "pytest>=9.0",
+    "pytest-cov>=7.0",
+    "ruff>=0.17",
+]
+scrape = [
+    "lxml",
+    "pandas",
+    "requests",
+]
+
+[tool.uv.build-backend]
+module-root = ""
 
 [tool.ruff]
-exclude = ["skrooge/scraper.py"]
+extend-exclude = ["skrooge/scraper.py"]
 
-[tool.setuptools]
-packages = ["skrooge",]
+[tool.ruff.lint]
+extend-select = ["B", "C4", "I", "UP"]
 
-[tool.setuptools.package-data]
-'skrooge' = ['instances.json']
+[tool.pytest]
+minversion = "9.0"
+testpaths = ["tests"]
+strict = true
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+source = ["skrooge"]
+omit = ["skrooge/scraper.py"]

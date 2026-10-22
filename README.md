@@ -2,8 +2,8 @@
 
 [![PyPI](https://img.shields.io/pypi/v/skrooge.svg)](https://pypi.org/project/skrooge/)
 [![Changelog](https://img.shields.io/github/v/release/getsentry/skrooge?include_prereleases&label=changelog)](https://github.com/getsentry/skrooge/releases)
-[![Tests](https://github.com/getsentry/skrooge/workflows/Test/badge.svg)](https://github.com/getsentry/skrooge/actions?query=workflow%3ATest)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/getsentry/skrooge/blob/master/LICENSE)
+[![Tests](https://github.com/getsentry/skrooge/actions/workflows/python-package.yml/badge.svg)](https://github.com/getsentry/skrooge/actions/workflows/python-package.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/getsentry/skrooge/blob/main/LICENSE)
 
 A quick and dirty kubernetes cost estimator
 
@@ -40,11 +40,25 @@ Cost: $1828 / month ($21,936 / year)
 
 ## Installation
 
-Install this tool using `pip`:
+skrooge requires Python 3.11 or newer. Install it as a standalone tool using [`uv`](https://docs.astral.sh/uv/):
 
+    uv tool install skrooge
+
+Or with `pipx` or `pip`:
+
+    pipx install skrooge
     pip install skrooge
 
 ## Usage
+
+Estimate the cost of adding 2.5 cores and 2024MiB of memory to each of 30 replicas running on `n2-standard-32` nodes:
+
+    $ skrooge estimate --instance n2-standard-32 --replicas 30 --cpu 2500 --mem 2024
+    This workload is running on n2-standard-32 instances in us-central1 with 32 cores and 128GiB of memory.
+    This workload will require 75.0 cores and 59.296875 GiB of memory. This workload is cores-constrained.
+    This workload will require 3 instances, costing $3.73/h (or $2722/m (or $32669/y)) at sud rates.
+
+Use `--region`, `--cost-class`, and `--format json` to change the region, pricing tier, and output format.
 
 For help, run:
 
@@ -56,20 +70,25 @@ You can also use:
 
 ## Development
 
-To contribute to this tool, first checkout the code. Then create a new virtual environment:
+This project uses [`uv`](https://docs.astral.sh/uv/) to manage its environment. To contribute, check out the code and install the dependencies:
 
     cd skrooge
-    python -m venv venv
-    source venv/bin/activate
-
-Now install the dependencies, test dependencies, and GCP cost scraping dependencies:
-
-    pip install -e '.[lint,scrape,test]'
+    uv sync
 
 To run the tests:
 
-    pytest
+    uv run pytest
+
+To lint and format:
+
+    uv run ruff check .
+    uv run ruff format .
+
+To run the same checks automatically on each commit, install the [pre-commit](https://pre-commit.com/) hooks:
+
+    uv tool install pre-commit
+    pre-commit install
 
 To update the instances.json file:
 
-    python3 skrooge/scraper.py > skrooge/instances.json
+    uv run --group scrape python skrooge/scraper.py > skrooge/instances.json

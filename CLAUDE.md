@@ -5,7 +5,7 @@
 Skrooge is a CLI tool for estimating Kubernetes scaling costs on GCP. Given a deployment's replica count, CPU/memory changes, and instance type, it calculates how many additional GCP instances are needed and their cost across different pricing tiers.
 
 **Repository**: `getsentry/skrooge`
-**Language**: Python 3.8+
+**Language**: Python 3.11+
 **License**: Apache 2.0
 
 ## Repository Structure
@@ -23,44 +23,51 @@ skrooge/
 │   ├── test_skrooge.py     # CLI integration tests (Click CliRunner)
 │   └── test_utils.py       # Unit tests for calculation functions
 ├── scripts/
-│   └── bump-version.sh     # Version bumping script
-├── .github/workflows/      # CI/CD (test, publish, release, changelog)
+│   └── bump-version.sh     # Version bumping script (run by Craft; updates pyproject.toml and uv.lock)
+├── .github/
+│   ├── workflows/          # CI/CD (test, publish, release, changelog)
+│   └── dependabot.yml      # Monthly grouped updates for GitHub Actions and uv.lock
 ├── pyproject.toml           # Project metadata, dependencies, tool config
-├── .pre-commit-config.yaml  # Pre-commit hooks (ruff, whitespace, yaml)
+├── uv.lock                  # Locked dependency versions (commit changes to this)
+├── .pre-commit-config.yaml  # Pre-commit hooks (ruff, whitespace, yaml, toml)
 └── .craft.yml               # Sentry Craft release configuration
 ```
 
 ## Development Setup
 
+The project is managed with [uv](https://docs.astral.sh/uv/) and built with the `uv_build` backend.
+
 ```bash
-python -m venv venv
-source venv/bin/activate
-pip install -e '.[lint,scrape,test]'
+uv sync
 ```
 
-Dependency groups defined in `pyproject.toml`:
-- **Core**: `click`, `click-log`
-- **`[lint]`**: `ruff`
-- **`[test]`**: `pytest`, `pytest-cov`
-- **`[scrape]`**: `pandas`, `requests`, `lxml`
+This creates `.venv` with the package (editable) and the `dev` group. Dependencies defined in `pyproject.toml`:
+- **Runtime**: `click`, `click-log`
+- **`dev` group** (installed by default): `pytest`, `pytest-cov`, `ruff`
+- **`scrape` group**: `pandas`, `requests`, `lxml` (add with `--group scrape`)
+
+When changing dependencies, use `uv add`/`uv remove` (or edit `pyproject.toml` and run `uv lock`) and commit `uv.lock`; CI uses `uv sync --locked` and fails if the lockfile is stale.
 
 ## Common Commands
 
 ```bash
 # Run tests
-pytest
+uv run pytest
 
 # Run tests with coverage (as CI does)
-pytest --cov=./ --cov-report=xml
+uv run pytest --cov --cov-report=xml
 
 # Lint
-ruff check .
+uv run ruff check .
 
 # Format
-ruff format .
+uv run ruff format .
+
+# Build the sdist and wheel into dist/
+uv build
 
 # Update GCP instance data
-python3 skrooge/scraper.py > skrooge/instances.json
+uv run --group scrape python skrooge/scraper.py > skrooge/instances.json
 ```
 
 ## Architecture
@@ -78,9 +85,9 @@ Data flow: CLI parses args → loads instance data → calls utils for calculati
 
 ## Testing
 
-Tests use `pytest`. CLI tests use Click's `CliRunner` for integration testing.
+Tests use `pytest`, configured in the native `[tool.pytest]` table in `pyproject.toml` with `strict = true` and `filterwarnings = ["error"]`, so any warning (including deprecations from Click) fails the suite. CLI tests use Click's `CliRunner` for integration testing; don't use `runner.isolated_filesystem()`, which is deprecated in Click 8.5.
 
-- `tests/test_skrooge.py`: CLI integration tests (version flag, invalid input handling, negative value normalization, cost output verification)
+- `tests/test_skrooge.py`: CLI integration tests (version flag, invalid input handling, negative value normalization, cost output verification, verbosity logging)
 - `tests/test_utils.py`: Unit tests for `determine_constrained_resource` and `determine_instance_count_required` with a c2-standard-30 fixture
 
 Test data uses a hardcoded `c2_standard_30_instance_data` dict rather than loading from `instances.json`.
@@ -89,19 +96,21 @@ Test data uses a hardcoded `c2_standard_30_instance_data` dict rather than loadi
 
 GitHub Actions workflows target `main` branch:
 
-- **`python-package.yml`**: Runs lint (`ruff check .`) and tests (`pytest --cov`) across Python 3.9–3.12 on every push/PR to main. Uploads coverage to Codecov.
-- **`publish.yml`**: Triggered by pushes to `release/**` branches. Runs tests, then builds and uploads to PyPI via OIDC.
-- **`release.yml`**: Manual workflow dispatch using Sentry's Craft for version bumping, changelog generation, and GitHub releases.
+- **`python-package.yml`**: On every push/PR to main, runs three jobs: `lint` (`ruff check` and `ruff format --check`), `test` (`pytest --cov` across Python 3.11–3.15, uploading coverage to Codecov), and `package` (`uv build`, then runs the CLI from the built wheel).
+- **`publish.yml`**: Triggered by pushes to `release/**` branches. Runs tests, then builds with `uv build` and uploads `dist/*` as a workflow artifact named after the commit SHA, which Craft publishes to PyPI.
+- **`release.yml`**: Manual workflow dispatch using Sentry's Craft for version bumping (via `scripts/bump-version.sh`, which needs uv), changelog generation, and GitHub releases.
 - **`changelog-preview.yml`**: Previews changelog entries on PRs.
 
 ## Code Conventions
 
-- **Linting/Formatting**: Ruff (configured in `pyproject.toml`). `skrooge/scraper.py` is excluded from linting.
+- **Linting/Formatting**: Ruff (configured in `pyproject.toml`) with the default rules plus `B`, `C4`, `I`, and `UP`. `skrooge/scraper.py` is excluded from linting.
+- **GitHub Actions**: Pin every action to a full commit SHA with a `# vX.Y.Z` comment; Dependabot keeps them current.
 - **Style**: PEP 8, snake_case for all functions and variables.
 - **CLI framework**: Click with `click_log` for verbosity control.
 - **Error handling**: `click.BadParameter` for user-facing errors, with fuzzy match suggestions via `difflib.get_close_matches`.
-- **Logging**: Python stdlib `logging` module, wired through `click_log`.
-- **Imports**: Standard library first, third-party second, local (relative) imports third.
+- **Logging**: Each module uses `logger = logging.getLogger(__name__)`; never log on the root logger. `cli.py` attaches `click_log` to the `skrooge` package logger, so `--verbosity` covers every module.
+- **Package data**: Read bundled files with `importlib.resources.files("skrooge")`, not paths relative to `__file__`.
+- **Imports**: Standard library first, third-party second, local (relative) imports third (enforced by ruff's `I` rules).
 - **No type annotations**: The codebase does not use type hints consistently.
 - **Units**: CPU in milli-cores, memory in MiB. Instance specs use cores and GiB.
 
@@ -140,6 +149,6 @@ GitHub Actions workflows target `main` branch:
 Configured in `.pre-commit-config.yaml`:
 - Trailing whitespace removal
 - End-of-file newline
-- YAML syntax check
+- YAML and TOML syntax checks
 - Large file prevention
 - Ruff lint and format
