@@ -1,5 +1,8 @@
+import json
+
 from click.testing import CliRunner
 
+from skrooge import tui
 from skrooge.cli import cli
 
 
@@ -77,6 +80,96 @@ def test_verbosity_includes_calculation_logs():
     )
     assert result.exit_code == 0
     # logged from skrooge.cli
-    assert "constrained_resource='cores'" in result.output
+    assert "replicas=30" in result.output
     # logged from skrooge.utils
+    assert "constrained_resource='cores'" in result.output
     assert "Calculating constrained resource" in result.output
+
+
+def test_missing_pricing_is_reported():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "estimate",
+            "--instance",
+            "m3-ultramem-32",
+            "--replicas",
+            1,
+            "--cpu",
+            1000,
+            "--mem",
+            1024,
+            "--cost-class",
+            "preemptible",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "No preemptible pricing for m3-ultramem-32 in us-central1." in result.output
+
+
+def test_memory_only_change():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "estimate",
+            "--instance",
+            "n2-standard-32",
+            "--replicas",
+            30,
+            "--cpu",
+            0,
+            "--mem",
+            8192,
+        ],
+    )
+    assert result.exit_code == 0
+    assert "memory-constrained" in result.output
+    assert "require 2 instances" in result.output
+
+
+def test_tui_loads_workloads_and_prints_summary(tmp_path, monkeypatch):
+    path = tmp_path / "skrooge.json"
+    path.write_text(
+        json.dumps(
+            {
+                "workloads": [
+                    {
+                        "name": "web",
+                        "replicas": 30,
+                        "cpu": 2500,
+                        "mem": 2024,
+                        "instance": "n2-standard-32",
+                    }
+                ]
+            }
+        )
+    )
+    # Quit as soon as the TUI starts
+    monkeypatch.setattr(tui.SkroogeApp, "run", lambda app: app.exit())
+
+    result = CliRunner().invoke(cli, ["tui", str(path)])
+    assert result.exit_code == 0
+    assert "web" in result.output
+    assert "$2,722" in result.output
+    assert "Net change" in result.output
+
+
+def test_tui_starts_with_a_workload_when_file_is_missing(tmp_path, monkeypatch):
+    started = []
+    monkeypatch.setattr(tui.SkroogeApp, "run", lambda app: started.append(app))
+
+    result = CliRunner().invoke(cli, ["tui", str(tmp_path / "new.json")])
+    assert result.exit_code == 0
+    assert started[0].workloads == [tui.Workload()]
+    assert started[0].path == tmp_path / "new.json"
+
+
+def test_tui_rejects_invalid_workloads_file(tmp_path):
+    path = tmp_path / "skrooge.json"
+    path.write_text('{"workloads": [{"memory": 1024}]}')
+
+    result = CliRunner().invoke(cli, ["tui", str(path)])
+    assert result.exit_code == 2
+    assert "unknown workload fields: memory" in result.output

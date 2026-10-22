@@ -24,6 +24,7 @@ classifiers = [
 dependencies = [
     "click>=8.1",
     "click-log>=0.4",
+    "textual>=8.2.8",
 ]
 
 [project.urls]

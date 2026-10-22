@@ -7,10 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `skrooge tui`, an interactive terminal UI that updates estimates live as you edit inputs, handles several workloads at once with a net total, and saves them to a JSON file
+
 ### Fixed
 
 - `--verbosity` now also shows log output from the cost calculation functions
 - Correct the `--format` help text
+- A CPU or memory change of 0 no longer crashes with a division by zero
+- An instance type with no price for the chosen region and cost class gives an error instead of a traceback
 
 ### Changed
 

@@ -68,6 +68,34 @@ Use `--region`, `--cost-class`, and `--format json` to change the region, pricin
 
 If you installed skrooge, drop the `uvx` prefix and run `skrooge` directly (or `python -m skrooge`).
 
+### Interactive mode
+
+`skrooge tui` opens a terminal UI where you can change every input and watch the estimate update as you type. You can estimate several workloads at once and see the net change across all of them, and the selected workload's cost at every pricing tier side by side:
+
+    uvx skrooge tui
+
+| Key | Action |
+| --- | --- |
+| `ctrl+n` | Add a workload (starts as a copy of the selected one) |
+| `ctrl+r` | Remove the selected workload |
+| `ctrl+s` | Save the workloads |
+| `ctrl+q` | Quit, leaving a summary table in your terminal |
+
+Use `tab` to move between fields, and the arrow keys in the workloads table to pick which workload you're editing. CPU and memory are per-replica changes, as with `estimate`. A negative change to the resource a workload is bound by is a scale-down, which counts as a saving in the totals.
+
+Workloads are loaded from and saved to `skrooge.json` in the current directory; pass a path to use another file:
+
+    uvx skrooge tui capacity-plan.json
+
+The file looks like this, where `region` and `cost_class` are optional and default to `us-central1` and `sud`:
+
+    {
+      "workloads": [
+        {"name": "web", "replicas": 30, "cpu": 2500, "mem": 2024, "instance": "n2-standard-32"},
+        {"name": "worker", "replicas": 12, "cpu": 4000, "mem": 16384, "instance": "n2-highmem-16", "cost_class": "cud-1y"}
+      ]
+    }
+
 For help, run:
 
     uvx skrooge --help

@@ -1,16 +1,17 @@
-import difflib
-import json
 import logging
-from importlib.resources import files
+from pathlib import Path
 
 import click
 import click_log
 
 from .render import render
 from .utils import (
-    calculate_cost,
-    determine_constrained_resource,
-    determine_instance_count_required,
+    COST_CLASSES,
+    REGIONS,
+    InstanceNotFoundError,
+    PricingNotFoundError,
+    calculate_estimate,
+    load_instance_types,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,54 +55,13 @@ def cli():
 @click.option(
     "--cost-class",
     help="The type of cost to calculate. Default: sud",
-    type=click.Choice(
-        ["sud", "ondemand", "preemptible", "cud-1y", "cud-3y"], case_sensitive=False
-    ),
+    type=click.Choice(COST_CLASSES, case_sensitive=False),
     default="sud",
 )
 @click.option(
     "--region",
     help="The region to use for cost calculation. Default: us-central1",
-    type=click.Choice(
-        [
-            "asia-east1",
-            "asia-east2",
-            "asia-northeast1",
-            "asia-northeast2",
-            "asia-northeast3",
-            "asia-south1",
-            "asia-south2",
-            "asia-southeast1",
-            "asia-southeast2",
-            "australia-southeast1",
-            "australia-southeast2",
-            "europe-central2",
-            "europe-north1",
-            "europe-southwest1",
-            "europe-west1",
-            "europe-west2",
-            "europe-west3",
-            "europe-west4",
-            "europe-west6",
-            "europe-west8",
-            "europe-west9",
-            "northamerica-northeast1",
-            "northamerica-northeast2",
-            "southamerica-east1",
-            "southamerica-west1",
-            "us-central1",
-            "us-central2",
-            "us-east1",
-            "us-east4",
-            "us-east5",
-            "us-south1",
-            "us-west1",
-            "us-west2",
-            "us-west3",
-            "us-west4",
-        ],
-        case_sensitive=False,
-    ),
+    type=click.Choice(REGIONS, case_sensitive=False),
     default="us-central1",
 )
 @click.option(
@@ -118,78 +78,53 @@ def estimate(replicas, cpu, mem, instance, cost_class, region, format):
     logger.info(f"{mem=}MiB")
     logger.info(f"{instance=}")
 
-    instance_family = instance.split("-")[0]
-
-    instance_types = json.loads(
-        files("skrooge").joinpath("instances.json").read_text(encoding="utf-8")
-    )
-
-    missing_instance_type_link = "https://github.com/getsentry/skrooge/issues/new?assignees=&labels=&projects=&template=BUG_REPORT.md"
-
     try:
-        instance_data = instance_types[instance_family][instance]
-    except KeyError:
-        try:
-            close_matches = difflib.get_close_matches(
-                instance, instance_types[instance_family].keys()
-            )
-        except KeyError:
-            logger.info(f"{instance_family}, {instance_types.keys()}")
-            close_matches = difflib.get_close_matches(
-                instance_family, instance_types.keys(), cutoff=0.4
-            )
-            raise click.BadParameter(
-                f"{instance_family} instance family not found. Did you mean: {', '.join(close_matches)}\nMissing an instance family that exists? {missing_instance_type_link}"
-            ) from None
-        raise click.BadParameter(
-            f"{instance} not found. Did you mean: {', '.join(close_matches)}\nMissing an instance type that exists? {missing_instance_type_link}"
-        ) from None
-
-    delta_cpu = replicas * abs(cpu)
-    delta_mem = replicas * abs(mem)
-
-    logger.info(f"{delta_cpu=}m {delta_mem=}MiB")
-
-    constrained_resource = determine_constrained_resource(instance_data, cpu, mem)
-    logger.info(f"{constrained_resource=}")
-
-    if constrained_resource == "cores":
-        resource_requirement = delta_cpu
-    else:
-        resource_requirement = delta_mem
-
-    required_instance_count = determine_instance_count_required(
-        instance_data, constrained_resource, resource_requirement
-    )
-    logger.info(f"{required_instance_count=}")
-
-    costs = calculate_cost(
-        instance_data,
-        required_instance_count,
-        cost_class=cost_class,
-        region=region,
-    )
-    logger.info(costs)
-
-    data = {
-        "replicas": replicas,
-        "cpu": cpu,
-        "mem": mem,
-        "delta_cpu": delta_cpu,
-        "delta_mem": delta_mem,
-        "constrained_resource": constrained_resource,
-        "resource_requirement": resource_requirement,
-        "required_instance_count": required_instance_count,
-        "instance": instance,
-        "instance_family": instance_family,
-        "instance_specs": instance_data["specs"],
-        "costs": costs,
-        "region": region,
-    }
-
-    logger.info(f"{data=}")
+        data = calculate_estimate(
+            load_instance_types(),
+            instance,
+            replicas,
+            cpu,
+            mem,
+            cost_class=cost_class,
+            region=region,
+        )
+    except (InstanceNotFoundError, PricingNotFoundError) as e:
+        raise click.BadParameter(str(e)) from None
 
     render(format=format, data=data)
+
+
+@cli.command(name="tui")
+@click.argument(
+    "workloads_file",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default="skrooge.json",
+)
+def tui(workloads_file):
+    """Interactively estimate one or more workloads, with live results
+
+    Workloads are loaded from WORKLOADS_FILE if it exists, and saved to it
+    with ctrl+s. Default: skrooge.json
+    """
+    # Imported here so the estimate command doesn't pay for loading Textual
+    from rich.console import Console
+
+    from .tui import SkroogeApp, load_workloads
+
+    workloads = []
+    if workloads_file.exists():
+        try:
+            workloads = load_workloads(workloads_file)
+        except (OSError, TypeError, ValueError) as e:
+            raise click.BadParameter(
+                f"{workloads_file}: {e}", param_hint="WORKLOADS_FILE"
+            ) from None
+
+    app = SkroogeApp(workloads, workloads_file)
+    app.run()
+    # Leave the final numbers in the terminal once the TUI is gone
+    if app.return_code == 0:
+        Console().print(app.summary_table())
 
 
 if __name__ == "__main__":

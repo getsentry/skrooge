@@ -1,6 +1,14 @@
+import pytest
+
 from skrooge.utils import (
+    InstanceNotFoundError,
+    PricingNotFoundError,
+    calculate_estimate,
     determine_constrained_resource,
     determine_instance_count_required,
+    find_instance_data,
+    instance_names,
+    load_instance_types,
 )
 
 c2_standard_30_instance_data = {
@@ -331,6 +339,20 @@ def test_determine_constrained_resource_normalize_negative_values_as_absolutes()
     )
 
 
+def test_determine_constrained_resource_cpu_only():
+    assert (
+        determine_constrained_resource(c2_standard_30_instance_data, cpu=1000, mem=0)
+        == "cores"
+    )
+
+
+def test_determine_constrained_resource_memory_only():
+    assert (
+        determine_constrained_resource(c2_standard_30_instance_data, cpu=0, mem=1024)
+        == "memory"
+    )
+
+
 def test_determine_instance_count_required_minimum_of_one_cpu():
     assert (
         determine_instance_count_required(c2_standard_30_instance_data, "cores", 10)
@@ -359,3 +381,51 @@ def test_determine_instance_count_required_memory():
         )
         == 4
     )
+
+
+def test_calculate_estimate_with_no_change_requires_no_instances():
+    data = calculate_estimate(
+        load_instance_types(),
+        "n2-standard-32",
+        replicas=30,
+        cpu=0,
+        mem=0,
+        cost_class="sud",
+        region="us-central1",
+    )
+    assert data["required_instance_count"] == 0
+    assert data["costs"]["hourly"] == 0
+
+
+def test_calculate_estimate_missing_pricing():
+    with pytest.raises(
+        PricingNotFoundError,
+        match="No preemptible pricing for m3-ultramem-32 in us-central1",
+    ):
+        calculate_estimate(
+            load_instance_types(),
+            "m3-ultramem-32",
+            replicas=1,
+            cpu=1000,
+            mem=1024,
+            cost_class="preemptible",
+            region="us-central1",
+        )
+
+
+def test_find_instance_data_suggests_instance_types():
+    with pytest.raises(InstanceNotFoundError, match="Did you mean: n2-standard-32"):
+        find_instance_data(load_instance_types(), "n2-standard-33")
+
+
+def test_find_instance_data_suggests_instance_families():
+    with pytest.raises(
+        InstanceNotFoundError, match="n9 instance family not found. Did you mean"
+    ):
+        find_instance_data(load_instance_types(), "n9-standard-32")
+
+
+def test_instance_names_excludes_licenses():
+    names = instance_names(load_instance_types())
+    assert "n2-standard-32" in names
+    assert "rhel" not in names

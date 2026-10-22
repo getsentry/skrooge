@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Skrooge is a CLI tool for estimating Kubernetes scaling costs on GCP. Given a deployment's replica count, CPU/memory changes, and instance type, it calculates how many additional GCP instances are needed and their cost across different pricing tiers.
+Skrooge is a CLI tool for estimating Kubernetes scaling costs on GCP. Given a deployment's replica count, CPU/memory changes, and instance type, it calculates how many additional GCP instances are needed and their cost across different pricing tiers. `skrooge tui` does the same interactively, for several workloads at once.
 
 **Repository**: `getsentry/skrooge`
 **Language**: Python 3.11+
@@ -15,12 +15,14 @@ skrooge/
 ├── skrooge/                # Main package
 │   ├── __main__.py         # Entry point for `python -m skrooge`
 │   ├── cli.py              # Click CLI commands and options
-│   ├── utils.py            # Core calculation logic (constrained resource, instance count, cost)
+│   ├── utils.py            # Core logic (instance lookup, constrained resource, instance count, cost)
 │   ├── render.py           # Output formatting (english, json)
+│   ├── tui.py              # Textual app for `skrooge tui` (live multi-workload estimates)
 │   ├── scraper.py          # GCP instance data scraper (generates instances.json)
 │   └── instances.json      # Bundled GCP instance specs and regional pricing (~1MB)
 ├── tests/
 │   ├── test_skrooge.py     # CLI integration tests (Click CliRunner)
+│   ├── test_tui.py         # TUI tests (Textual's run_test pilot) and workloads file handling
 │   └── test_utils.py       # Unit tests for calculation functions
 ├── scripts/
 │   └── bump-version.sh     # Version bumping script (run by Craft; updates pyproject.toml and uv.lock)
@@ -42,7 +44,7 @@ uv sync
 ```
 
 This creates `.venv` with the package (editable) and the `dev` group. Dependencies defined in `pyproject.toml`:
-- **Runtime**: `click`, `click-log`
+- **Runtime**: `click`, `click-log`, `textual` (which brings `rich`)
 - **`dev` group** (installed by default): `pytest`, `pytest-cov`, `ruff`
 - **`scrape` group**: `pandas`, `requests`, `lxml` (add with `--group scrape`)
 
@@ -53,6 +55,9 @@ When changing dependencies, use `uv add`/`uv remove` (or edit `pyproject.toml` a
 ```bash
 # Run tests
 uv run pytest
+
+# Run the TUI (loads and saves skrooge.json by default)
+uv run skrooge tui
 
 # Run tests with coverage (as CI does)
 uv run pytest --cov --cov-report=xml
@@ -72,25 +77,31 @@ uv run --group scrape python skrooge/scraper.py > skrooge/instances.json
 
 ## Architecture
 
-The codebase follows a simple three-module pattern:
+The codebase follows a simple pattern of a calculation core with two front ends:
 
-- **`cli.py`**: Defines the Click CLI group and `estimate` command. Loads `instances.json`, validates instance types with fuzzy matching (`difflib`), and orchestrates the calculation pipeline.
-- **`utils.py`**: Pure calculation functions:
+- **`cli.py`**: Defines the Click CLI group, the `estimate` command, and the `tui` command (which imports `tui.py` lazily so `estimate` doesn't load Textual). Converts `InstanceNotFoundError`/`PricingNotFoundError` into `click.BadParameter`.
+- **`utils.py`**: Shared constants (`REGIONS`, `COST_CLASSES`) and the calculation pipeline:
+  - `load_instance_types()` / `find_instance_data()` — load `instances.json` and look up an instance type, raising `InstanceNotFoundError` with fuzzy-match suggestions (`difflib`)
   - `determine_constrained_resource()` — determines if CPU or memory is the limiting factor
   - `determine_instance_count_required()` — calculates how many instances are needed
   - `calculate_cost()` — computes hourly/monthly/yearly costs
+  - `calculate_estimate()` — runs the whole pipeline and returns the result dict that `render` and the TUI consume
 - **`render.py`**: Output dispatching for `english` (human-readable) and `json` formats.
+- **`tui.py`**: `SkroogeApp`, a Textual app with an input form, an estimate panel (every cost class for the selected workload), and a workloads table with a net total. `Workload` keeps numeric fields as the text typed, and `estimate_workload()` validates them before calling `calculate_estimate()`. In the TUI a negative change to the constrained resource counts as a saving; the CLI reports magnitudes only.
 
-Data flow: CLI parses args → loads instance data → calls utils for calculations → passes result dict to render.
+Data flow: CLI parses args → `calculate_estimate()` → result dict to render. The TUI recalculates every workload with `calculate_estimate()` on each input change.
+
+Textual's `Input.Changed`, `Select.Changed`, and `DataTable.RowHighlighted` messages can arrive after the form or table has moved on (filling in the form posts them too). TUI handlers therefore read the widget's current value or cursor rather than the message's, which makes stale messages no-ops.
 
 ## Testing
 
 Tests use `pytest`, configured in the native `[tool.pytest]` table in `pyproject.toml` with `strict = true` and `filterwarnings = ["error"]`, so any warning (including deprecations from Click) fails the suite. CLI tests use Click's `CliRunner` for integration testing; don't use `runner.isolated_filesystem()`, which is deprecated in Click 8.5.
 
 - `tests/test_skrooge.py`: CLI integration tests (version flag, invalid input handling, negative value normalization, cost output verification, verbosity logging)
-- `tests/test_utils.py`: Unit tests for `determine_constrained_resource` and `determine_instance_count_required` with a c2-standard-30 fixture
+- `tests/test_utils.py`: Unit tests for `determine_constrained_resource` and `determine_instance_count_required` with a c2-standard-30 fixture, plus instance lookup and `calculate_estimate` against the bundled data
+- `tests/test_tui.py`: Drives `SkroogeApp` headlessly with `App.run_test()`. Async tests are wrapped by the `app_test` decorator, which runs them with `asyncio.run`, so no pytest-asyncio is needed.
 
-Test data uses a hardcoded `c2_standard_30_instance_data` dict rather than loading from `instances.json`.
+The constrained-resource and instance-count unit tests use a hardcoded `c2_standard_30_instance_data` dict rather than loading from `instances.json`.
 
 ## CI/CD
 
