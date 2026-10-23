@@ -54,6 +54,10 @@ Use `--region`, `--cost-class`, and `--format json` to change the region, pricin
 
     uvx skrooge estimate --replicas 1000 --cpu 5810 --mem 9950 --instance n2-highcpu-64 --region europe-west1 --cost-class cud-1y --format json
 
+Not every instance type has every cost class in every region. To list the regions with pricing for an instance type and cost class:
+
+    uvx skrooge regions --instance n2-highcpu-64 --cost-class cud-1y
+
 If you installed skrooge, drop the `uvx` prefix and run `skrooge` directly (or `python -m skrooge`).
 
 ### Command reference
@@ -72,6 +76,8 @@ def show_help(*args):
     cog.out(f"```\n$ skrooge {' '.join([*args, '--help'])}\n{result.output}```\n")
 
 show_help()
+show_help("estimate")
+show_help("regions")
 ]]] -->
 ```
 $ skrooge --help
@@ -85,14 +91,8 @@ Options:
 
 Commands:
   estimate  Quick estimate of the cost or savings a kubernetes scale...
+  regions   List the regions skrooge has pricing for
 ```
-<!-- [[[end]]] -->
-
-`skrooge estimate` takes these options. The `--region` choices are the regions in the bundled pricing data:
-
-<!-- [[[cog
-show_help("estimate")
-]]] -->
 ```
 $ skrooge estimate --help
 Usage: skrooge estimate [OPTIONS]
@@ -112,10 +112,24 @@ Options:
                                   on  [required]
   --cost-class [sud|ondemand|preemptible|cud-1y|cud-3y]
                                   The type of cost to calculate. Default: sud
-  --region [africa-south1|asia-east1|asia-east2|asia-northeast1|asia-northeast2|asia-northeast3|asia-south1|asia-south2|asia-southeast1|asia-southeast2|asia-southeast3|australia-southeast1|australia-southeast2|europe-central2|europe-north1|europe-north2|europe-southwest1|europe-west1|europe-west2|europe-west3|europe-west4|europe-west5|europe-west6|europe-west8|europe-west9|europe-west10|europe-west12|me-central1|me-central2|me-west1|northamerica-northeast1|northamerica-northeast2|northamerica-south1|southamerica-east1|southamerica-west1|us-central1|us-east1|us-east4|us-east5|us-east7|us-south1|us-west1|us-west2|us-west3|us-west4|us-west8]
-                                  The region to use for cost calculation.
-                                  Default: us-central1
+  --region REGION                 The region to use for cost calculation.
+                                  Default: us-central1. List them with:
+                                  skrooge regions
   -f, --format [english|json]     The output format. Default: english
+  --help                          Show this message and exit.
+```
+```
+$ skrooge regions --help
+Usage: skrooge regions [OPTIONS]
+
+  List the regions skrooge has pricing for
+
+Options:
+  -i, --instance TEXT             Only list regions with pricing for this
+                                  instance type
+  --cost-class [sud|ondemand|preemptible|cud-1y|cud-3y]
+                                  Only list regions with pricing in this cost
+                                  class
   --help                          Show this message and exit.
 ```
 <!-- [[[end]]] -->

@@ -82,7 +82,7 @@ uv run python -m skrooge.scraper diff skrooge/instances.json new.json
 
 The codebase follows a simple three-module pattern:
 
-- **`cli.py`**: Defines the Click CLI group and `estimate` command. Loads `instances.json` (cached by `load_instance_types()`), derives the `--region` choices from it, validates the instance type (with fuzzy matching via `difflib`) and that the chosen region and cost class have pricing, and orchestrates the calculation pipeline. Not every instance type has every cost class in every region, so never index pricing without checking.
+- **`cli.py`**: Defines the Click CLI group and the `estimate` and `regions` commands. Loads `instances.json` (cached by `load_instance_types()`), derives the `--region` choices from it with `available_regions()` (which `regions` also uses, optionally filtered by instance type and cost class), validates the instance type with `find_instance_type()` (with fuzzy matching via `difflib`) and that the chosen region and cost class have pricing, and orchestrates the calculation pipeline. `--region` uses `metavar="REGION"` so `estimate --help` (and the README help generated from it) doesn't list every region and doesn't change when the price data does. Not every instance type has every cost class in every region, so never index pricing without checking.
 - **`utils.py`**: Pure calculation functions:
   - `determine_constrained_resource()` — determines if CPU or memory is the limiting factor
   - `determine_instance_count_required()` — calculates how many instances are needed
@@ -95,7 +95,7 @@ Data flow: CLI parses args → loads instance data → calls utils for calculati
 
 Tests use `pytest`, configured in the native `[tool.pytest]` table in `pyproject.toml` with `strict = true` and `filterwarnings = ["error"]`, so any warning (including deprecations from Click) fails the suite. CLI tests use Click's `CliRunner` for integration testing; don't use `runner.isolated_filesystem()`, which is deprecated in Click 8.5.
 
-- `tests/test_skrooge.py`: CLI integration tests (version flag, invalid input handling, negative value normalization, cost output verification, verbosity logging). Tests that check prices or which regions and cost classes exist use the `instance_data` fixture's fixed data, not the bundled `instances.json`, so the automated price updates don't break them.
+- `tests/test_skrooge.py`: CLI integration tests (version flag, invalid input handling, negative value normalization, cost output verification, verbosity logging, `regions` filters). Tests that check prices or which regions and cost classes exist use the `instance_data` fixture's fixed data, not the bundled `instances.json`, so the automated price updates don't break them.
 - `tests/test_utils.py`: Unit tests for `determine_constrained_resource` and `determine_instance_count_required` with a c2-standard-30 fixture
 
 - `tests/test_scraper.py`: Unit tests for the scraper against `tests/fixtures/billing_catalog_skus.json`, with no network access
@@ -110,7 +110,7 @@ GitHub Actions workflows target `main` branch:
 - **`publish.yml`**: Triggered by pushes to `release/**` branches. Runs tests, then builds with `uv build` and uploads `dist/*` as a workflow artifact named after the commit SHA, which Craft publishes to PyPI.
 - **`release.yml`**: Manual workflow dispatch using Sentry's Craft for version bumping (via `scripts/bump-version.sh`, which needs uv), changelog generation, and GitHub releases.
 - **`changelog-preview.yml`**: Previews changelog entries on PRs.
-- **`update-instances.yml`**: Daily (and manual) run of the scraper, authenticated with workload identity federation when the `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` variables are set, otherwise the `GCP_BILLING_API_KEY` secret. It validates the output, regenerates the README's CLI help (the `--region` choices come from `instances.json`), runs the tests against it, and if `instances.json` changed, force-pushes a single commit on top of `main` to `automation/update-instances` and opens or updates one PR with the diff report as its description. It uses the Sentry release bot GitHub App's token, because PRs opened with `GITHUB_TOKEN` don't trigger CI. It never pushes to `main`.
+- **`update-instances.yml`**: Daily (and manual) run of the scraper, authenticated with workload identity federation when the `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` variables are set, otherwise the `GCP_BILLING_API_KEY` secret. It validates the output, runs the tests against it, and if `instances.json` changed, force-pushes a single commit on top of `main` to `automation/update-instances` and opens or updates one PR with the diff report as its description. It uses the Sentry release bot GitHub App's token, because PRs opened with `GITHUB_TOKEN` don't trigger CI. It never pushes to `main`.
 
 The step-by-step release process (changelog, running the Release workflow with an explicit version, approving in getsentry/publish) is documented in the "Releasing" section of `README.md`. Craft doesn't edit `CHANGELOG.md` here (no changelog policy is configured), and `.craft.yml`'s `minVersion: 1.8.1` means the Release workflow needs an explicit version, not `auto` or a bump keyword.
 
