@@ -243,8 +243,14 @@ def description_body(sku):
     return match["body"] if match else ""
 
 
-def is_excluded(body):
-    return bool(set(re.split(r"[\s-]+", body.lower())) & EXCLUDED_WORDS)
+def is_excluded(sku):
+    """Whether a SKU prices something other than predefined machine types
+
+    Checks the whole description, as GPU SKUs say how they're used after the GPU's
+    name, e.g. "Nvidia L4 GPU attached to DWS Defined Duration VMs running in Iowa".
+    """
+    words = re.split(r"[\s()-]+", sku.get("description", "").lower())
+    return bool(set(words) & EXCLUDED_WORDS)
 
 
 def classify(sku):
@@ -258,7 +264,7 @@ def classify(sku):
         return None
     usage_type = category.get("usageType")
     body = description_body(sku)
-    if not body or is_excluded(body):
+    if not body or is_excluded(sku):
         return None
     if category.get("resourceGroup") in LEGACY_SHARED_CORE_SKUS:
         return "machine", LEGACY_SHARED_CORE_SKUS[category["resourceGroup"]]
@@ -352,7 +358,7 @@ def _might_be_used(sku):
     if category.get("resourceFamily") != "Compute":
         return False
     body = description_body(sku)
-    if not body or is_excluded(body):
+    if not body or is_excluded(sku):
         return False
     words = set(re.split(r"[\s(),:]+", body.lower()))
     return bool(

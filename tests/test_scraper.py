@@ -127,6 +127,18 @@ def make_sku(description, usage_type="OnDemand", resource_group="CPU"):
         ("N2 Sole Tenancy Instance Ram running in Americas", "OnDemand", "RAM", None),
         ("N2 Instance Extended Ram running in Americas", "OnDemand", "RAM", None),
         (
+            "Nvidia Tesla A100 GPU attached to DWS Defined Duration VMs running in Iowa",
+            "OnDemand",
+            "GPU",
+            None,
+        ),
+        (
+            "Nvidia L4 GPU attached to DWS Defined Duration VMs running in Virginia",
+            "OnDemand",
+            "GPU",
+            None,
+        ),
+        (
             "Nvidia Tesla T4 Virtual Workstation GPU running in Americas",
             "OnDemand",
             "GPU",
