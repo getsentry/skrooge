@@ -7,6 +7,7 @@ from skrooge.utils import (
     InstanceNotFoundError,
     PricingNotFoundError,
     calculate_estimate,
+    derive_resource_prices,
     determine_constrained_resource,
     determine_instance_count_required,
     find_instance_data,
@@ -490,6 +491,14 @@ def test_resource_prices_ignore_shared_core_instance_types():
 )
 def test_resource_prices_unavailable(instance, cost_class):
     assert resource_prices(INSTANCE_TYPES, instance, cost_class, "us-central1") is None
+
+
+def test_derive_resource_prices_rejects_families_that_dont_fit():
+    n2 = json.loads(json.dumps(INSTANCE_TYPES["n2"]))
+    assert derive_resource_prices(n2, "sud", "us-central1")
+    # One machine type priced some other way spoils the fit for the family
+    n2["n2-highcpu-8"]["regions"]["us-central1"]["sud"] *= 1.2
+    assert derive_resource_prices(n2, "sud", "us-central1") is None
 
 
 def with_recorded_prices(prices):
