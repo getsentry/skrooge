@@ -1,8 +1,13 @@
 # Regenerates skrooge/instances.json from the Cloud Billing Catalog API and opens or
 # updates a single pull request when it changes. It never pushes to main.
 #
-# Needs:
+# Needs one of:
+# - Workload identity federation: the GCP_WORKLOAD_IDENTITY_PROVIDER and
+#   GCP_SERVICE_ACCOUNT variables, for a provider that trusts this repository and a
+#   service account it can impersonate. The service account's project needs the Cloud
+#   Billing API enabled. No key is stored.
 # - The GCP_BILLING_API_KEY secret: an API key restricted to the Cloud Billing API.
+# And:
 # - The Sentry release bot GitHub App (SENTRY_RELEASE_BOT_CLIENT_ID variable and
 #   SENTRY_RELEASE_BOT_PRIVATE_KEY secret, as release.yml uses) with contents and pull
 #   requests write access. A pull request opened with GITHUB_TOKEN wouldn't trigger CI.
@@ -28,6 +33,9 @@ jobs:
   update:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write # For workload identity federation
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -39,8 +47,20 @@ jobs:
           enable-cache: false
       - name: Install dependencies
         run: uv sync --locked
+      - name: Authenticate to Google Cloud
+        id: gcp
+        if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != ''
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+          create_credentials_file: false
+          export_environment_variables: false
       - name: Scrape prices
         env:
+          # The scraper uses the access token if there is one, otherwise the API key
+          GCP_BILLING_ACCESS_TOKEN: ${{ steps.gcp.outputs.access_token }}
           GCP_BILLING_API_KEY: ${{ secrets.GCP_BILLING_API_KEY }}
         run: uv run --frozen python -m skrooge.scraper scrape --output "$RUNNER_TEMP/instances.json"
       - name: Validate

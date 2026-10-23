@@ -1,6 +1,8 @@
 """Generate instances.json from GCP's Cloud Billing Catalog API
 
     GCP_BILLING_API_KEY=... uv run python -m skrooge.scraper scrape --output new.json
+    GCP_BILLING_ACCESS_TOKEN="$(gcloud auth print-access-token)" \
+        uv run python -m skrooge.scraper scrape --output new.json
     uv run python -m skrooge.scraper validate new.json
     uv run python -m skrooge.scraper diff skrooge/instances.json new.json
 
@@ -35,6 +37,8 @@ logger = logging.getLogger(__name__)
 SERVICE_ID = "6F81-5844-456A"  # Compute Engine
 SKUS_URL = f"https://cloudbilling.googleapis.com/v1/services/{SERVICE_ID}/skus"
 API_KEY_ENV = "GCP_BILLING_API_KEY"
+ACCESS_TOKEN_ENV = "GCP_BILLING_ACCESS_TOKEN"
+QUOTA_PROJECT_ENV = "GCP_QUOTA_PROJECT"
 
 COST_CLASSES = ["ondemand", "sud", "preemptible", "cud-1y", "cud-3y"]
 USAGE_TYPES = {
@@ -66,7 +70,22 @@ SUD_MULTIPLIERS = {
 
 # Families whose instance prices come from per-vCPU and per-GiB SKUs
 RESOURCE_PRICED_FAMILIES = [f for f in MACHINE_TYPES if f not in LEGACY_SHARED_CORE]
+# What the scraper uses, by kind. SKUs for anything else are ignored.
+USED_KEYS = {
+    "cores": set(RESOURCE_PRICED_FAMILIES),
+    "memory": set(RESOURCE_PRICED_FAMILIES),
+    "gpu": {model for model, _ in GPUS.values()},
+    "machine": set(LEGACY_SHARED_CORE.values()),
+}
 
+# Prices are per hour, and memory prices per GiB-hour. Maps each kind of SKU to the
+# base unit its price is converted from, and how many of those make up one of ours.
+BASE_UNITS = {
+    "cores": ("s", 3600),
+    "memory": ("By.s", 2**30 * 3600),
+    "gpu": ("s", 3600),
+    "machine": ("s", 3600),
+}
 EXPECTED_UNITS = {"cores": "h", "memory": "GiBy.h", "gpu": "h", "machine": "h"}
 
 # SKUs for these are priced differently from a family's predefined machine types
@@ -113,17 +132,36 @@ def natural_key(text):
     return [int(part) if part.isdigit() else part for part in re.split(r"(\d+)", text)]
 
 
-def fetch_skus(api_key, urlopen=urllib.request.urlopen, page_size=5000):
+def auth_headers(environ=os.environ):
+    """Return headers that authenticate Cloud Billing API requests, or None
+
+    Prefers an OAuth access token, e.g. from `gcloud auth print-access-token` or GitHub
+    Actions workload identity federation, over an API key. Credentials go in headers so
+    they can't end up in a logged URL.
+    """
+    token = environ.get(ACCESS_TOKEN_ENV)
+    if token:
+        headers = {"Authorization": f"Bearer {token}"}
+        # User credentials may need a project to bill quota to
+        if environ.get(QUOTA_PROJECT_ENV):
+            headers["X-Goog-User-Project"] = environ[QUOTA_PROJECT_ENV]
+        return headers
+    api_key = environ.get(API_KEY_ENV)
+    if api_key:
+        return {"X-Goog-Api-Key": api_key}
+    return None
+
+
+def fetch_skus(headers, urlopen=urllib.request.urlopen, page_size=5000):
     "Yield every Compute Engine SKU, priced in USD"
     page_token = None
     while True:
         query = {"currencyCode": "USD", "pageSize": page_size}
         if page_token:
             query["pageToken"] = page_token
-        # Send the key in a header so it can't end up in a logged URL
         request = urllib.request.Request(
             f"{SKUS_URL}?{urllib.parse.urlencode(query)}",
-            headers={"X-Goog-Api-Key": api_key, "Accept": "application/json"},
+            headers={**headers, "Accept": "application/json"},
         )
         page = _get_json(request, urlopen)
         yield from page.get("skus", [])
@@ -180,6 +218,23 @@ def unit_price(sku):
         if price:
             break
     return expression["usageUnit"], price
+
+
+def normalized_price(sku, kind):
+    """Return a SKU's price per hour, or per GiB-hour for memory
+
+    Converts using the SKU's own base unit, as some memory SKUs are priced per GB
+    (GBy.h) rather than per GiB. Returns None if the SKU's units don't fit its kind.
+    """
+    unit, price = unit_price(sku)
+    pricing = max(sku["pricingInfo"], key=lambda info: info.get("effectiveTime", ""))
+    expression = pricing["pricingExpression"]
+    base_unit, factor = BASE_UNITS[kind]
+    if "baseUnitConversionFactor" not in expression:
+        return price if unit == EXPECTED_UNITS[kind] else None
+    if expression.get("baseUnit") != base_unit:
+        return None
+    return price * factor / float(expression["baseUnitConversionFactor"])
 
 
 def description_body(sku):
@@ -239,49 +294,73 @@ def classify(sku):
 def collect_prices(skus):
     """Index SKU prices by (kind, key, cost class, region)
 
-    Returns the prices and stats on what was matched, to report on stderr.
+    When SKUs disagree on a price, the one that covers fewer regions wins, so a
+    region's own SKU beats a multi-region one. Returns the prices and stats on what was
+    matched, to report on stderr.
     """
-    prices = {}
+    found = {}
     stats = {"skus": 0, "matched": 0, "unmatched": set(), "conflicts": []}
     for sku in skus:
         stats["skus"] += 1
-        cost_class = USAGE_TYPES.get(sku.get("category", {}).get("usageType"))
+        category = sku.get("category", {})
+        cost_class = USAGE_TYPES.get(category.get("usageType"))
         classified = classify(sku)
         if classified is None or cost_class is None:
-            # Report CPU, RAM and GPU SKUs that might belong to a family, in case
-            # GCP changes how it describes them
-            category = sku.get("category", {})
-            body = description_body(sku)
-            if (
-                category.get("resourceFamily") == "Compute"
-                and category.get("resourceGroup") in {"CPU", "RAM", "GPU", "N1Standard"}
-                and not is_excluded(body)
-            ):
-                stats["unmatched"].add(f"{body} ({category.get('usageType')})")
+            if _might_be_used(sku):
+                stats["unmatched"].add(
+                    f"{description_body(sku)} ({category.get('usageType')})"
+                )
             continue
         kind, key = classified
-        unit, price = unit_price(sku)
-        if unit != EXPECTED_UNITS[kind]:
+        if key not in USED_KEYS[kind]:
+            continue
+        price = normalized_price(sku, kind)
+        if price is None:
             logger.warning(
-                "Skipping %s (%s): expected %s pricing, got %s",
+                "Skipping %s (%s): can't convert %s pricing to %s",
                 sku.get("description"),
                 sku.get("skuId"),
+                unit_price(sku)[0],
                 EXPECTED_UNITS[kind],
-                unit,
             )
             continue
         if not price:
             continue
         stats["matched"] += 1
-        for region in sku.get("serviceRegions", []):
-            if not REGION.match(region):
-                continue
+        regions = [r for r in sku.get("serviceRegions", []) if REGION.match(r)]
+        for region in regions:
             index = (kind, key, cost_class, region)
-            if index in prices and not math.isclose(prices[index], price):
-                stats["conflicts"].append((index, prices[index], price))
-                continue
-            prices.setdefault(index, price)
+            candidate = (len(regions), price, sku)
+            current = found.get(index)
+            if current is None or candidate[0] < current[0]:
+                found[index] = candidate
+            elif candidate[0] == current[0] and not math.isclose(price, current[1]):
+                stats["conflicts"].append((index, current[2], sku))
+    # Drop conflicts that a more specific SKU settled
+    stats["conflicts"] = [
+        conflict
+        for conflict in stats["conflicts"]
+        if found[conflict[0]][2] is conflict[1]
+    ]
+    prices = {index: price for index, (_, price, _) in found.items()}
     return prices, stats
+
+
+def _might_be_used(sku):
+    "Whether an unrecognized SKU mentions a family or GPU the scraper uses"
+    category = sku.get("category", {})
+    if category.get("resourceFamily") != "Compute":
+        return False
+    body = description_body(sku)
+    if not body or is_excluded(body):
+        return False
+    words = set(re.split(r"[\s(),:]+", body.lower()))
+    return bool(
+        words & USED_KEYS["cores"]
+        or {w.lower() for model in USED_KEYS["gpu"] for w in model.split()} & words
+        or "memory-optimized" in words
+        or {"compute", "optimized"} <= words
+    )
 
 
 def machine_price(prices, family, machine_type, cost_class, region):
@@ -591,12 +670,16 @@ def scrape(args):
     if args.skus_file:
         skus = load_skus(args.skus_file)
     else:
-        api_key = os.environ.get(API_KEY_ENV)
-        if not api_key:
-            logger.error("Set %s to a Cloud Billing API key", API_KEY_ENV)
+        headers = auth_headers()
+        if headers is None:
+            logger.error(
+                "Set %s to an access token or %s to a Cloud Billing API key",
+                ACCESS_TOKEN_ENV,
+                API_KEY_ENV,
+            )
             return 2
         try:
-            skus = list(fetch_skus(api_key))
+            skus = list(fetch_skus(headers))
         except RuntimeError as e:
             logger.error("%s", e)
             return 1
@@ -608,7 +691,16 @@ def scrape(args):
     logger.info("Read %d SKUs, used %d", stats["skus"], stats["matched"])
     for index, kept, ignored in stats["conflicts"]:
         logger.warning(
-            "Conflicting prices for %s: kept %s, ignored %s", index, kept, ignored
+            "Conflicting %s prices for %s in %s: kept %s (%s, %s), ignored %s (%s, %s)",
+            index[2],
+            index[1],
+            index[3],
+            normalized_price(kept, index[0]),
+            kept.get("description"),
+            kept.get("skuId"),
+            normalized_price(ignored, index[0]),
+            ignored.get("description"),
+            ignored.get("skuId"),
         )
     if stats["unmatched"]:
         logger.info(

@@ -209,9 +209,10 @@ class FakeUrlopen:
         return io.BytesIO(json.dumps(response).encode())
 
 
-def test_fetch_skus_follows_pages_and_sends_the_key_in_a_header(pages):
+def test_fetch_skus_follows_pages_and_sends_credentials_in_headers(pages):
     urlopen = FakeUrlopen(pages)
-    skus = list(scraper.fetch_skus("secret-key", urlopen=urlopen))
+    headers = {"X-Goog-Api-Key": "secret-key"}
+    skus = list(scraper.fetch_skus(headers, urlopen=urlopen))
 
     assert len(skus) == sum(len(page["skus"]) for page in pages)
     assert len(urlopen.requests) == 2
@@ -235,7 +236,7 @@ def http_error(code, message):
 def test_fetch_skus_reports_api_errors_without_the_key():
     urlopen = FakeUrlopen([http_error(403, "API key not valid.")])
     with pytest.raises(RuntimeError) as excinfo:
-        list(scraper.fetch_skus("secret-key", urlopen=urlopen))
+        list(scraper.fetch_skus({"X-Goog-Api-Key": "secret-key"}, urlopen=urlopen))
     assert str(excinfo.value) == (
         "Cloud Billing API request failed with HTTP 403: API key not valid."
     )
@@ -245,7 +246,7 @@ def test_fetch_skus_reports_api_errors_without_the_key():
 def test_fetch_skus_retries_server_errors(monkeypatch, pages):
     monkeypatch.setattr(scraper.time, "sleep", lambda seconds: None)
     urlopen = FakeUrlopen([http_error(503, "Unavailable"), *pages])
-    assert len(list(scraper.fetch_skus("key", urlopen=urlopen))) > 0
+    assert len(list(scraper.fetch_skus({}, urlopen=urlopen))) > 0
     assert len(urlopen.requests) == 3
 
 
@@ -265,11 +266,44 @@ def test_collect_prices_indexes_by_kind_family_cost_class_and_region(skus):
     assert stats["conflicts"] == []
 
 
-def test_collect_prices_reports_unrecognized_skus(skus):
+def test_collect_prices_reports_unrecognized_skus_for_used_families(skus):
     unknown = json.loads(json.dumps(skus[0]))
-    unknown["description"] = "Z9 Brand New Instance Core running in Americas"
-    _, stats = scraper.collect_prices([unknown])
-    assert stats["unmatched"] == {"Z9 Brand New Instance Core (OnDemand)"}
+    unknown["description"] = "N2 Brand New Instance Core running in Americas"
+    unused = json.loads(json.dumps(skus[0]))
+    unused["description"] = "Z9 Brand New Instance Core running in Americas"
+    _, stats = scraper.collect_prices([unknown, unused])
+    assert stats["unmatched"] == {"N2 Brand New Instance Core (OnDemand)"}
+
+
+def test_collect_prices_ignores_families_it_doesnt_use(skus):
+    sku = json.loads(json.dumps(skus[1]))
+    sku["description"] = "Z9 Instance Ram running in Americas"
+    sku["pricingInfo"][0]["pricingExpression"]["baseUnit"] = "s"
+    prices, stats = scraper.collect_prices([sku])
+    assert prices == {}
+    assert stats["matched"] == 0
+
+
+def test_collect_prices_prefers_a_single_region_sku(skus):
+    americas = skus[0]
+    iowa = json.loads(json.dumps(americas))
+    iowa["serviceRegions"] = ["us-central1"]
+    iowa["pricingInfo"][0]["pricingExpression"]["tieredRates"][0]["unitPrice"][
+        "nanos"
+    ] = 40000000
+    for order in ([americas, iowa], [iowa, americas]):
+        prices, stats = scraper.collect_prices(order)
+        assert prices["cores", "n2", "ondemand", "us-central1"] == pytest.approx(0.04)
+        assert prices["cores", "n2", "ondemand", "us-east1"] == pytest.approx(0.03)
+        assert stats["conflicts"] == []
+
+    # A single-region SKU also settles a conflict between multi-region ones
+    other = json.loads(json.dumps(americas))
+    other["pricingInfo"][0]["pricingExpression"]["tieredRates"][0]["unitPrice"][
+        "nanos"
+    ] = 50000000
+    _, stats = scraper.collect_prices([americas, other, iowa])
+    assert [conflict[0][3] for conflict in stats["conflicts"]] == ["us-east1"]
 
 
 def test_collect_prices_reports_conflicting_prices(skus):
@@ -284,9 +318,26 @@ def test_collect_prices_reports_conflicting_prices(skus):
 
 def test_collect_prices_skips_unexpected_units(skus):
     sku = json.loads(json.dumps(skus[1]))
-    sku["pricingInfo"][0]["pricingExpression"]["usageUnit"] = "GiBy.mo"
+    sku["pricingInfo"][0]["pricingExpression"]["baseUnit"] = "s"
     prices, _ = scraper.collect_prices([sku])
     assert prices == {}
+
+
+def test_normalized_price_converts_gb_to_gib(skus):
+    sku = json.loads(json.dumps(skus[1]))  # $0.004 per GiB-hour
+    assert scraper.normalized_price(sku, "memory") == pytest.approx(0.004)
+    expression = sku["pricingInfo"][0]["pricingExpression"]
+    expression["usageUnit"] = "GBy.h"
+    expression["baseUnitConversionFactor"] = 3.6e12
+    # $0.004 per GB-hour is $0.004 * 2^30 / 10^9 per GiB-hour
+    assert scraper.normalized_price(sku, "memory") == pytest.approx(0.004294967)
+
+
+def test_normalized_price_without_a_conversion_factor(skus):
+    sku = json.loads(json.dumps(skus[0]))
+    del sku["pricingInfo"][0]["pricingExpression"]["baseUnitConversionFactor"]
+    assert scraper.normalized_price(sku, "cores") == pytest.approx(0.03)
+    assert scraper.normalized_price(sku, "memory") is None
 
 
 def test_build_instances_prices_machine_types_from_vcpu_and_memory(instances):
@@ -488,16 +539,35 @@ def test_diff_without_changes():
     assert "⚠️" not in report
 
 
-def test_main_scrape_requires_an_api_key(monkeypatch, capsys):
+def test_auth_headers():
+    assert scraper.auth_headers({}) is None
+    assert scraper.auth_headers({"GCP_BILLING_API_KEY": "key"}) == {
+        "X-Goog-Api-Key": "key"
+    }
+    # An access token wins over an API key
+    environ = {"GCP_BILLING_API_KEY": "key", "GCP_BILLING_ACCESS_TOKEN": "token"}
+    assert scraper.auth_headers(environ) == {"Authorization": "Bearer token"}
+    environ["GCP_QUOTA_PROJECT"] = "my-project"
+    assert scraper.auth_headers(environ) == {
+        "Authorization": "Bearer token",
+        "X-Goog-User-Project": "my-project",
+    }
+
+
+def test_main_scrape_requires_credentials(monkeypatch, capsys):
     monkeypatch.delenv(scraper.API_KEY_ENV, raising=False)
+    monkeypatch.delenv(scraper.ACCESS_TOKEN_ENV, raising=False)
     assert scraper.main(["scrape"]) == 2
-    assert "Set GCP_BILLING_API_KEY" in capsys.readouterr().err
+    assert "Set GCP_BILLING_ACCESS_TOKEN to an access token or GCP_BILLING_API_KEY" in (
+        capsys.readouterr().err
+    )
 
 
 def test_main_scrape_never_prints_the_api_key(monkeypatch, capsys):
+    monkeypatch.delenv(scraper.ACCESS_TOKEN_ENV, raising=False)
     monkeypatch.setenv(scraper.API_KEY_ENV, "secret-key")
 
-    def fail(api_key):
+    def fail(headers):
         raise RuntimeError("Cloud Billing API request failed with HTTP 400: Bad")
         yield
 

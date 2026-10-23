@@ -70,8 +70,8 @@ uv run ruff format .
 # Build the sdist and wheel into dist/
 uv build
 
-# Update GCP instance data (needs a Cloud Billing API key)
-GCP_BILLING_API_KEY=... uv run python -m skrooge.scraper scrape --output new.json
+# Update GCP instance data (needs an access token or a Cloud Billing API key)
+GCP_BILLING_ACCESS_TOKEN="$(gcloud auth print-access-token)" uv run python -m skrooge.scraper scrape --output new.json
 uv run python -m skrooge.scraper diff skrooge/instances.json new.json
 ```
 
@@ -107,7 +107,7 @@ GitHub Actions workflows target `main` branch:
 - **`publish.yml`**: Triggered by pushes to `release/**` branches. Runs tests, then builds with `uv build` and uploads `dist/*` as a workflow artifact named after the commit SHA, which Craft publishes to PyPI.
 - **`release.yml`**: Manual workflow dispatch using Sentry's Craft for version bumping (via `scripts/bump-version.sh`, which needs uv), changelog generation, and GitHub releases.
 - **`changelog-preview.yml`**: Previews changelog entries on PRs.
-- **`update-instances.yml`**: Daily (and manual) run of the scraper with the `GCP_BILLING_API_KEY` secret. It validates the output, runs the tests against it, and if `instances.json` changed, force-pushes a single commit on top of `main` to `automation/update-instances` and opens or updates one PR with the diff report as its description. It uses the Sentry release bot GitHub App's token, because PRs opened with `GITHUB_TOKEN` don't trigger CI. It never pushes to `main`.
+- **`update-instances.yml`**: Daily (and manual) run of the scraper, authenticated with workload identity federation when the `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` variables are set, otherwise the `GCP_BILLING_API_KEY` secret. It validates the output, runs the tests against it, and if `instances.json` changed, force-pushes a single commit on top of `main` to `automation/update-instances` and opens or updates one PR with the diff report as its description. It uses the Sentry release bot GitHub App's token, because PRs opened with `GITHUB_TOKEN` don't trigger CI. It never pushes to `main`.
 
 The step-by-step release process (changelog, running the Release workflow with an explicit version, approving in getsentry/publish) is documented in the "Releasing" section of `README.md`. Craft doesn't edit `CHANGELOG.md` here (no changelog policy is configured), and `.craft.yml`'s `minVersion: 1.8.1` means the Release workflow needs an explicit version, not `auto` or a bump keyword.
 
