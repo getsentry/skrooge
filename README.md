@@ -154,7 +154,7 @@ The CLI help in the [command reference](#command-reference) is generated with [c
 
     uv run cog -r README.md
 
-If you forget, CI regenerates it and pushes a commit to your pull request's branch. That needs the branch to be in this repository; on pull requests from forks, CI fails until you run cog yourself.
+If you forget, CI's `readme` check fails. On a pull request from a branch in this repository, CI also commits the regenerated help to the branch for you; on pull requests from forks, run cog yourself.
 
 To run the same checks automatically on each commit, install the [pre-commit](https://pre-commit.com/) hooks:
 

@@ -33,9 +33,10 @@ jobs:
     - name: Check formatting with ruff
       run: uv run --frozen ruff format --check .
 
-  # Regenerates the CLI help in README.md with cog. On a pull request from a branch in this
-  # repository, readme-push pushes any change to the branch; otherwise this fails if the help
-  # is stale. cog runs the pull request's code, so this job gets no secrets.
+  # Regenerates the CLI help in README.md with cog, and fails if the help is stale, so a stale
+  # commit can't be merged. On a pull request from a branch in this repository, readme-push
+  # then pushes the fix to the branch. cog runs the pull request's code, so this job gets no
+  # secrets.
   readme:
     runs-on: ubuntu-latest
     outputs:
@@ -58,23 +59,22 @@ jobs:
         if ! git diff --exit-code -- README.md; then
           echo "readme=$(base64 --wrap=0 README.md)" >> "$GITHUB_OUTPUT"
         fi
-    # Secrets aren't available to pull requests from forks or Dependabot
     - name: Fail if the help is out of date
-      if: >-
-        steps.cog.outputs.readme != ''
-        && !(github.event.pull_request.head.repo.full_name == github.repository
-        && github.actor != 'dependabot[bot]')
+      if: steps.cog.outputs.readme != ''
       run: |
-        echo '::error file=README.md::The CLI help in README.md is out of date. Run "uv run cog -r README.md" and commit the result.'
+        echo '::error file=README.md::The CLI help in README.md is out of date. Run "uv run cog -r README.md" and commit the result. On a pull request from a branch in this repository, readme-push commits it for you.'
         exit 1
 
   # Pushes the help that readme regenerated to the pull request's branch. It never runs the pull
   # request's code, which could otherwise steal the token. A push with GITHUB_TOKEN wouldn't
-  # trigger CI on the new commit.
+  # trigger CI on the new commit. Secrets aren't available to pull requests from forks or
+  # Dependabot.
   readme-push:
     needs: readme
+    # readme fails when the help is stale, so run anyway
     if: >-
-      needs.readme.outputs.readme != ''
+      !cancelled()
+      && needs.readme.outputs.readme != ''
       && github.event.pull_request.head.repo.full_name == github.repository
       && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
