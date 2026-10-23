@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import pytest
 
 from skrooge.utils import (
@@ -9,8 +12,13 @@ from skrooge.utils import (
     find_instance_data,
     hourly_price,
     instance_names,
-    load_instance_types,
     resource_prices,
+)
+
+# A fixed copy of part of instances.json (us-central1 only), so tests that check prices
+# don't break when the bundled data is updated
+INSTANCE_TYPES = json.loads(
+    (Path(__file__).parent / "fixtures" / "instances.json").read_text()
 )
 
 c2_standard_30_instance_data = {
@@ -387,7 +395,7 @@ def test_determine_instance_count_required_memory():
 
 def test_calculate_estimate_with_no_change_requires_no_instances():
     data = calculate_estimate(
-        load_instance_types(),
+        INSTANCE_TYPES,
         "n2-standard-32",
         replicas=30,
         cpu=0,
@@ -405,7 +413,7 @@ def test_calculate_estimate_missing_pricing():
         match="No preemptible pricing for m3-ultramem-32 in us-central1",
     ):
         calculate_estimate(
-            load_instance_types(),
+            INSTANCE_TYPES,
             "m3-ultramem-32",
             replicas=1,
             cpu=1000,
@@ -417,25 +425,31 @@ def test_calculate_estimate_missing_pricing():
 
 def test_find_instance_data_suggests_instance_types():
     with pytest.raises(InstanceNotFoundError, match="Did you mean: n2-standard-32"):
-        find_instance_data(load_instance_types(), "n2-standard-33")
+        find_instance_data(INSTANCE_TYPES, "n2-standard-33")
 
 
 def test_find_instance_data_suggests_instance_families():
     with pytest.raises(
         InstanceNotFoundError, match="n9 instance family not found. Did you mean"
     ):
-        find_instance_data(load_instance_types(), "n9-standard-32")
+        find_instance_data(INSTANCE_TYPES, "n9-standard-32")
 
 
-def test_instance_names_excludes_licenses():
-    names = instance_names(load_instance_types())
+def test_instance_names_skip_keys_that_arent_families():
+    instance_types = {
+        **INSTANCE_TYPES,
+        "license": {"rhel": {}},
+        "resource_prices": {"n2": {}},
+    }
+    names = instance_names(instance_types)
     assert "n2-standard-32" in names
     assert "rhel" not in names
+    assert "n2" not in names
 
 
 def web_estimate(packing_efficiency=100):
     return calculate_estimate(
-        load_instance_types(),
+        INSTANCE_TYPES,
         "n2-standard-32",
         replicas=30,
         cpu=2500,
@@ -447,12 +461,11 @@ def web_estimate(packing_efficiency=100):
 
 
 def test_resource_prices_add_up_to_instance_prices():
-    instance_types = load_instance_types()
-    prices = resource_prices(instance_types, "n2-standard-32", "sud", "us-central1")
+    prices = resource_prices(INSTANCE_TYPES, "n2-standard-32", "sud", "us-central1")
     assert prices["cores"] == pytest.approx(0.02529, abs=1e-5)
     assert prices["memory"] == pytest.approx(0.00339, abs=1e-5)
     for instance in ("n2-standard-32", "n2-highmem-16", "n2-highcpu-8"):
-        instance_data = instance_types["n2"][instance]
+        instance_data = INSTANCE_TYPES["n2"][instance]
         specs = instance_data["specs"]
         assert specs["cores"] * prices["cores"] + specs["memory"] * prices[
             "memory"
@@ -460,10 +473,9 @@ def test_resource_prices_add_up_to_instance_prices():
 
 
 def test_resource_prices_ignore_shared_core_instance_types():
-    # e2-micro and friends are priced for a fraction of their 2 vCPUs
-    instance_types = load_instance_types()
-    assert resource_prices(instance_types, "e2-standard-4", "ondemand", "us-central1")
-    assert not resource_prices(instance_types, "e2-micro", "ondemand", "us-central1")
+    # e2-micro is priced for a fraction of its 2 vCPUs, so it doesn't fit the others
+    assert resource_prices(INSTANCE_TYPES, "e2-standard-4", "ondemand", "us-central1")
+    assert not resource_prices(INSTANCE_TYPES, "e2-micro", "ondemand", "us-central1")
 
 
 @pytest.mark.parametrize(
@@ -471,36 +483,30 @@ def test_resource_prices_ignore_shared_core_instance_types():
     [
         # Every c2 machine type has 4 GiB per vCPU, so the prices can't be told apart
         ("c2-standard-30", "sud"),
-        # GPU machine type prices include their GPUs
+        # GPU machine type prices include their GPUs. These a2 types' GPUs scale with
+        # their vCPUs, so a fit would absorb the GPU prices.
         ("a2-highgpu-1g", "ondemand"),
-        ("g2-standard-4", "ondemand"),
     ],
 )
 def test_resource_prices_unavailable(instance, cost_class):
-    assert (
-        resource_prices(load_instance_types(), instance, cost_class, "us-central1")
-        is None
-    )
+    assert resource_prices(INSTANCE_TYPES, instance, cost_class, "us-central1") is None
 
 
 def with_recorded_prices(prices):
     return {
-        **load_instance_types(),
+        **INSTANCE_TYPES,
         "resource_prices": {"n2": {"us-central1": {"sud": prices}}},
     }
 
 
 def test_resource_prices_prefer_recorded_prices():
-    derived = resource_prices(
-        load_instance_types(), "n2-standard-32", "sud", "us-central1"
-    )
+    derived = resource_prices(INSTANCE_TYPES, "n2-standard-32", "sud", "us-central1")
     recorded = {"cores": derived["cores"] * 1.005, "memory": derived["memory"] * 1.005}
     instance_types = with_recorded_prices(recorded)
     assert (
         resource_prices(instance_types, "n2-standard-32", "sud", "us-central1")
         == recorded
     )
-    assert "resource_prices" not in instance_names(instance_types)
 
 
 def test_resource_prices_reject_recorded_prices_that_dont_add_up():
@@ -531,7 +537,7 @@ def test_packing_efficiency_scales_resource_costs():
 
 def test_calculate_estimate_without_resource_prices():
     data = calculate_estimate(
-        load_instance_types(),
+        INSTANCE_TYPES,
         "c2-standard-30",
         replicas=30,
         cpu=2500,

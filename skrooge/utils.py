@@ -6,6 +6,8 @@ import math
 import re
 from importlib.resources import files
 
+from .machine_types import GPUS
+
 logger = logging.getLogger(__name__)
 
 COST_CLASSES = ["sud", "ondemand", "preemptible", "cud-1y", "cud-3y"]
@@ -185,8 +187,7 @@ def derive_resource_prices(family_data, cost_class, region):
     shapes = [
         (data["specs"]["cores"], data["specs"]["memory"], price)
         for instance, data in family_data.items()
-        if instance not in SHARED_CORE_INSTANCE_TYPES
-        and isinstance(data["specs"]["cores"], (int, float))
+        if priced_by_resource(instance, data["specs"])
         and (price := hourly_price(data, cost_class, region))
     ]
     if len({memory / cores for cores, memory, _ in shapes}) < 2:
@@ -201,12 +202,26 @@ def derive_resource_prices(family_data, cost_class, region):
         "cores": (cp * mm - mp * cm) / determinant,
         "memory": (cc * mp - cm * cp) / determinant,
     }
-    # Families priced some other way, such as with GPUs included, don't fit
+    # Families priced some other way don't fit
     if not all(
         adds_up(prices, cores, memory, price) for cores, memory, price in shapes
     ):
         return None
     return prices
+
+
+def priced_by_resource(instance, specs):
+    """Whether an instance type's price could be just its vCPUs plus its memory
+
+    Shared-core types have a fraction of their vCPUs at a fraction of the price,
+    and GPU types' prices include their GPUs. A linear fit can absorb GPU prices
+    when a family's GPUs scale with its vCPUs, so they're ruled out by name.
+    """
+    return (
+        instance not in SHARED_CORE_INSTANCE_TYPES
+        and instance not in GPUS
+        and isinstance(specs["cores"], (int, float))
+    )
 
 
 def adds_up(prices, cores, memory, price):
@@ -221,17 +236,13 @@ def resource_prices(instance_types, instance, cost_class, region):
 
     Uses the prices recorded in instances.json, or derives them from the family's
     machine type prices. Returns None unless they add up to this instance type's
-    price, which they don't for GPU machine types, for example.
+    price.
     """
     family = instance.split("-")[0]
     instance_data = instance_types[family][instance]
     specs = instance_data["specs"]
     price = hourly_price(instance_data, cost_class, region)
-    if (
-        not price
-        or instance in SHARED_CORE_INSTANCE_TYPES
-        or not isinstance(specs["cores"], (int, float))
-    ):
+    if not price or not priced_by_resource(instance, specs):
         return None
     prices = (
         instance_types.get("resource_prices", {})
