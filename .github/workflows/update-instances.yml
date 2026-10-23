@@ -60,9 +60,13 @@ jobs:
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
-      - name: Run tests against the new data
+      - name: Check the CLI works with the new data
         if: steps.compare.outputs.changed == 'true'
-        run: uv run --frozen pytest
+        run: |
+          uv run --frozen pytest
+          for cost_class in ondemand sud preemptible cud-1y cud-3y; do
+            uv run --frozen skrooge estimate --instance n2-standard-32 --replicas 30 --cpu 2500 --mem 2024 --cost-class "$cost_class"
+          done
       - name: Get auth token
         if: steps.compare.outputs.changed == 'true'
         id: token

@@ -92,7 +92,7 @@ Data flow: CLI parses args → loads instance data → calls utils for calculati
 
 Tests use `pytest`, configured in the native `[tool.pytest]` table in `pyproject.toml` with `strict = true` and `filterwarnings = ["error"]`, so any warning (including deprecations from Click) fails the suite. CLI tests use Click's `CliRunner` for integration testing; don't use `runner.isolated_filesystem()`, which is deprecated in Click 8.5.
 
-- `tests/test_skrooge.py`: CLI integration tests (version flag, invalid input handling, negative value normalization, cost output verification, verbosity logging)
+- `tests/test_skrooge.py`: CLI integration tests (version flag, invalid input handling, negative value normalization, cost output verification, verbosity logging). Tests that check prices or which regions and cost classes exist use the `instance_data` fixture's fixed data, not the bundled `instances.json`, so the automated price updates don't break them.
 - `tests/test_utils.py`: Unit tests for `determine_constrained_resource` and `determine_instance_count_required` with a c2-standard-30 fixture
 
 - `tests/test_scraper.py`: Unit tests for the scraper against `tests/fixtures/billing_catalog_skus.json`, with no network access
