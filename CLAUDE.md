@@ -159,7 +159,7 @@ The step-by-step release process (changelog, running the Release workflow with a
 }
 ```
 
-17 instance families, 220 instance types and 5 cost classes. Regions and cost classes come from the Cloud Billing Catalog API, so not every machine type has every cost class in every region. There's no SKU for sustained use discounts, so `sud` is the on-demand price with the family's multiplier from `SUD_MULTIPLIERS` in `scraper.py` applied to vCPUs and memory (not GPUs).
+20 instance families, 317 instance types and 5 cost classes. Specs for `c4d`, `n4d` and `n4a` come from `gcloud compute machine-types list`, so they only have `cores`, `memory` and `cpu`. m2 is priced as M1 plus GCP's on-demand "Memory Optimized Upgrade Premium" SKUs, added to every m2 cost class. Regions and cost classes come from the Cloud Billing Catalog API, so not every machine type has every cost class in every region. There's no SKU for sustained use discounts, so `sud` is the on-demand price with the family's multiplier from `SUD_MULTIPLIERS` in `scraper.py` applied to vCPUs and memory (not GPUs).
 
 `resource_prices` holds the hourly price of one vCPU (`cores`) and one GiB (`memory`) for each family priced from GCP's per-vCPU and per-GiB SKUs (every family but `f1` and `g1`). A machine type's price is `cores * cores price + memory * memory price`, except for the GPU families `a2` and `g2`, whose machine prices also include their GPUs, and the shared-core `e2-micro`, `e2-small` and `e2-medium`, which are billed for 0.25, 0.5 and 1 vCPU. Code that walks the top-level keys as instance families must skip `resource_prices`.
 

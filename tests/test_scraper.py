@@ -122,6 +122,18 @@ def make_sku(description, usage_type="OnDemand", resource_group="CPU"):
             "SomethingElse",
             ("machine", "g1-small"),
         ),
+        (
+            "Memory Optimized Upgrade Premium for Memory-optimized Instance Core",
+            "OnDemand",
+            "CPU",
+            ("cores", "m2-premium"),
+        ),
+        (
+            "Memory Optimized Upgrade Premium for Memory-optimized Instance Ram",
+            "OnDemand",
+            "RAM",
+            ("memory", "m2-premium"),
+        ),
         # Priced differently from predefined machine types
         ("N2 Custom Instance Core running in Americas", "OnDemand", "CPU", None),
         ("N2 Sole Tenancy Instance Ram running in Americas", "OnDemand", "RAM", None),
@@ -316,6 +328,26 @@ def test_collect_prices_prefers_a_single_region_sku(skus):
     ] = 50000000
     _, stats = scraper.collect_prices([americas, other, iowa])
     assert [conflict[0][3] for conflict in stats["conflicts"]] == ["us-east1"]
+
+
+def test_add_m2_prices():
+    prices = {
+        ("cores", "m1", "ondemand", "us-central1"): 0.03,
+        ("cores", "m1", "preemptible", "us-central1"): 0.01,
+        ("cores", "m1", "cud-1y", "us-central1"): 0.02,
+        ("memory", "m1", "ondemand", "us-central1"): 0.004,
+        ("cores", "m2-premium", "ondemand", "us-central1"): 0.005,
+        ("memory", "m2-premium", "ondemand", "us-central1"): 0.0006,
+        # No premium here, so no m2 price
+        ("cores", "m1", "ondemand", "europe-west1"): 0.03,
+    }
+    scraper.add_m2_prices(prices)
+    m2 = {key: price for key, price in prices.items() if key[1] == "m2"}
+    assert m2 == {
+        ("cores", "m2", "ondemand", "us-central1"): pytest.approx(0.035),
+        ("cores", "m2", "cud-1y", "us-central1"): pytest.approx(0.025),
+        ("memory", "m2", "ondemand", "us-central1"): pytest.approx(0.0046),
+    }
 
 
 def test_collect_prices_reports_conflicting_prices(skus):

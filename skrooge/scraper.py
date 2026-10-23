@@ -66,14 +66,17 @@ SUD_MULTIPLIERS = {
     "t2d": 1,
     "t2a": 0.7,
     "g2": 1,
+    "c4d": 1,
+    "n4d": 1,
+    "n4a": 1,
 }
 
 # Families whose instance prices come from per-vCPU and per-GiB SKUs
 RESOURCE_PRICED_FAMILIES = [f for f in MACHINE_TYPES if f not in LEGACY_SHARED_CORE]
 # What the scraper uses, by kind. SKUs for anything else are ignored.
 USED_KEYS = {
-    "cores": set(RESOURCE_PRICED_FAMILIES),
-    "memory": set(RESOURCE_PRICED_FAMILIES),
+    "cores": {*RESOURCE_PRICED_FAMILIES, "m2-premium"},
+    "memory": {*RESOURCE_PRICED_FAMILIES, "m2-premium"},
     "gpu": {model for model, _ in GPUS.values()},
     "machine": set(LEGACY_SHARED_CORE.values()),
 }
@@ -115,6 +118,11 @@ REGION = re.compile(r"^[a-z]+(-[a-z]+)+\d+$")
 DESCRIPTION = re.compile(
     r"^(?:Commitment(?: v\d+)?:\s*)?(?:Spot Preemptible |Preemptible )?"
     r"(?P<body>.+?)(?:\s+attached to .+?)?(?:\s+(?:running\s+)?in\s+.+)?$"
+)
+# M2 is priced as M1 plus these on-demand premiums, e.g. "Memory Optimized Upgrade Premium
+# for Memory-optimized Instance Core running in Americas"
+M2_PREMIUM = re.compile(
+    r"^Memory Optimized Upgrade Premium for Memory-optimized Instance (Core|Ram)\b"
 )
 LEGACY_SHARED_CORE_SKUS = {
     "F1Micro": "f1-micro",
@@ -263,6 +271,9 @@ def classify(sku):
     if category.get("resourceFamily") != "Compute":
         return None
     usage_type = category.get("usageType")
+    premium = M2_PREMIUM.match(sku.get("description", ""))
+    if premium:
+        return ("cores" if premium[1] == "Core" else "memory"), "m2-premium"
     body = description_body(sku)
     if not body or is_excluded(sku):
         return None
@@ -349,7 +360,22 @@ def collect_prices(skus):
         if found[conflict[0]][2] is conflict[1]
     ]
     prices = {index: price for index, (_, price, _) in found.items()}
+    add_m2_prices(prices)
     return prices, stats
+
+
+def add_m2_prices(prices):
+    """Price M2 vCPUs and memory as M1's plus the M2 upgrade premium
+
+    The premium only has on-demand SKUs, so it's added in full to commitment prices too.
+    M2 doesn't support Spot VMs, so it gets no preemptible price.
+    """
+    for (kind, key, cost_class, region), price in list(prices.items()):
+        if key != "m1" or cost_class == "preemptible":
+            continue
+        premium = prices.get((kind, "m2-premium", "ondemand", region))
+        if premium is not None:
+            prices[kind, "m2", cost_class, region] = price + premium
 
 
 def _might_be_used(sku):
