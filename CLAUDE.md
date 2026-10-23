@@ -26,7 +26,7 @@ skrooge/
 │   ├── test_tui.py         # TUI tests (Textual's run_test pilot) and workloads file handling
 │   ├── test_utils.py       # Unit tests for calculation functions
 │   ├── test_scraper.py     # Unit tests for SKU parsing, price mapping, validation and diffs
-│   └── fixtures/           # Cloud Billing Catalog API responses (synthetic prices) for scraper tests
+│   └── fixtures/           # Fixed data for tests: Cloud Billing Catalog API responses, and part of instances.json
 ├── scripts/
 │   └── bump-version.sh     # Version bumping script (run by Craft; updates pyproject.toml and uv.lock)
 ├── .github/
@@ -107,11 +107,11 @@ Textual's `Input.Changed`, `Select.Changed`, and `DataTable.RowHighlighted` mess
 Tests use `pytest`, configured in the native `[tool.pytest]` table in `pyproject.toml` with `strict = true` and `filterwarnings = ["error"]`, so any warning (including deprecations from Click) fails the suite. CLI tests use Click's `CliRunner` for integration testing; don't use `runner.isolated_filesystem()`, which is deprecated in Click 8.5.
 
 - `tests/test_skrooge.py`: CLI integration tests (version flag, invalid input handling, negative value normalization, cost output verification, verbosity logging). Tests that check prices or which regions and cost classes exist use the `instance_data` fixture's fixed data, not the bundled `instances.json`, so the automated price updates don't break them. The fixture patches `load_instance_types` in each module that imports it.
-- `tests/test_utils.py`: Unit tests for `determine_constrained_resource` and `determine_instance_count_required` with a c2-standard-30 fixture, plus instance lookup and `calculate_estimate` against the bundled data
+- `tests/test_utils.py`: Unit tests for `determine_constrained_resource` and `determine_instance_count_required` with a c2-standard-30 fixture, plus instance lookup, resource prices and `calculate_estimate`
 - `tests/test_tui.py`: Drives `SkroogeApp` headlessly with `App.run_test()`, in both cost models. Async tests are wrapped by the `app_test` decorator, which runs them with `asyncio.run`, so no pytest-asyncio is needed.
 - `tests/test_scraper.py`: Unit tests for the scraper against `tests/fixtures/billing_catalog_skus.json`, with no network access
 
-The constrained-resource and instance-count unit tests use a hardcoded `c2_standard_30_instance_data` dict rather than loading from `instances.json`. The scraper fixture is in the Cloud Billing Catalog API's response shape, but its prices are synthetic; never put real or made-up prices in `instances.json` by hand.
+The constrained-resource and instance-count unit tests use a hardcoded `c2_standard_30_instance_data` dict rather than loading from `instances.json`. The other utils tests and the TUI tests use `tests/fixtures/instances.json`, a fixed copy of part of `instances.json` (us-central1 only); add any machine types a new test needs to it rather than reading the bundled data. The scraper fixture is in the Cloud Billing Catalog API's response shape, but its prices are synthetic; never put real or made-up prices in `instances.json` by hand.
 
 ## CI/CD
 

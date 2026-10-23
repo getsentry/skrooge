@@ -1,6 +1,7 @@
 import asyncio
 import functools
 import json
+from pathlib import Path
 
 import pytest
 
@@ -12,9 +13,12 @@ from skrooge.tui import (
     load_workloads,
     save_workloads,
 )
-from skrooge.utils import load_instance_types
 
-instance_types = load_instance_types()
+# A fixed copy of part of instances.json (us-central1 only), so tests that check prices
+# don't break when the bundled data is updated
+instance_types = json.loads(
+    (Path(__file__).parent / "fixtures" / "instances.json").read_text()
+)
 
 
 def workloads():

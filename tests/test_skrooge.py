@@ -40,7 +40,11 @@ INSTANCE_DATA = {
         },
     },
     "resource_prices": {
-        "n2": {"me-central1": {"ondemand": {"cores": 0.03, "memory": 0.004}}},
+        "n2": {
+            "me-central1": {"ondemand": {"cores": 0.03, "memory": 0.004}},
+            # These add up to n2-standard-32's sud price
+            "us-central1": {"sud": {"cores": 0.0252888, "memory": 0.0033896}},
+        },
     },
 }
 
@@ -244,7 +248,7 @@ def test_zero_cpu_and_mem_is_rejected():
     assert "--cpu and --mem can't both be 0" in result.output
 
 
-def test_memory_only_change():
+def test_memory_only_change(instance_data):
     runner = CliRunner()
     result = runner.invoke(
         cli,
@@ -265,7 +269,7 @@ def test_memory_only_change():
     assert "require 2 instances" in result.output
 
 
-def test_tui_loads_workloads_and_prints_summary(tmp_path, monkeypatch):
+def test_tui_loads_workloads_and_prints_summary(instance_data, tmp_path, monkeypatch):
     path = tmp_path / "skrooge.json"
     path.write_text(
         json.dumps(
@@ -314,7 +318,7 @@ def test_tui_rejects_invalid_workloads_file(tmp_path):
 WEB_ARGS = ["estimate", "-i", "n2-standard-32", "-r", "30", "-c", "2500", "-m", "2024"]
 
 
-def test_bin_packed_estimate():
+def test_bin_packed_estimate(instance_data):
     result = CliRunner().invoke(cli, [*WEB_ARGS, "--packing-efficiency", "80"])
     assert result.exit_code == 0
     assert (
@@ -323,7 +327,7 @@ def test_bin_packed_estimate():
     )
 
 
-def test_bin_packed_estimate_in_json():
+def test_bin_packed_estimate_in_json(instance_data):
     result = CliRunner().invoke(cli, [*WEB_ARGS, "--format", "json"])
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -331,12 +335,13 @@ def test_bin_packed_estimate_in_json():
     assert data["resource_costs"]["total"]["monthly"] == 1532
 
 
-def test_no_bin_packed_estimate_when_pricing_cant_be_split():
+def test_no_bin_packed_estimate_when_pricing_cant_be_split(instance_data):
+    # n1-highcpu-16 has no recorded resource prices, and is the only n1 type to fit
     result = CliRunner().invoke(
-        cli, ["estimate", *REQUIRED_ARGS, "--instance", "c2-standard-30"]
+        cli, ["estimate", *REQUIRED_ARGS, "--instance", "n1-highcpu-16"]
     )
     assert result.exit_code == 0
-    assert "skrooge can't split c2-standard-30 pricing into cores and memory" in (
+    assert "skrooge can't split n1-highcpu-16 pricing into cores and memory" in (
         result.output
     )
 
