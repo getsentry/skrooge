@@ -266,3 +266,52 @@ def test_tui_rejects_invalid_workloads_file(tmp_path):
     result = CliRunner().invoke(cli, ["tui", str(path)])
     assert result.exit_code == 2
     assert "unknown workload fields: memory" in result.output
+
+
+WEB_ARGS = ["estimate", "-i", "n2-standard-32", "-r", "30", "-c", "2500", "-m", "2024"]
+
+
+def test_bin_packed_estimate():
+    result = CliRunner().invoke(cli, [*WEB_ARGS, "--packing-efficiency", "80"])
+    assert result.exit_code == 0
+    assert (
+        "Bin-packed in a cluster at 80% efficiency, this workload will cost $2.62/h (or $1914/m (or $22969/y)): $1731/m for cores and $183/m for memory."
+        in result.output
+    )
+
+
+def test_bin_packed_estimate_in_json():
+    result = CliRunner().invoke(cli, [*WEB_ARGS, "--format", "json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["packing_efficiency"] == 100
+    assert data["resource_costs"]["total"]["monthly"] == 1532
+
+
+def test_no_bin_packed_estimate_when_pricing_cant_be_split():
+    result = CliRunner().invoke(
+        cli, ["estimate", *REQUIRED_ARGS, "--instance", "c2-standard-30"]
+    )
+    assert result.exit_code == 0
+    assert "skrooge can't split c2-standard-30 pricing into cores and memory" in (
+        result.output
+    )
+
+
+def test_packing_efficiency_must_be_a_percentage():
+    result = CliRunner().invoke(cli, [*WEB_ARGS, "--packing-efficiency", "0"])
+    assert result.exit_code == 2
+    assert "0 is not in the range 1<=x<=100" in result.output
+
+
+def test_tui_loads_settings(tmp_path, monkeypatch):
+    path = tmp_path / "skrooge.json"
+    path.write_text(
+        '{"cost_model": "bin-packed", "packing_efficiency": 75, "workloads": []}'
+    )
+    started = []
+    monkeypatch.setattr(tui.SkroogeApp, "run", lambda app: started.append(app))
+
+    result = CliRunner().invoke(cli, ["tui", str(path)])
+    assert result.exit_code == 0
+    assert started[0].settings == tui.Settings("bin-packed", "75")

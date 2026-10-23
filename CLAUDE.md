@@ -86,10 +86,12 @@ The codebase follows a simple pattern of a calculation core with two front ends:
   - `check_pricing()` — raises `PricingNotFoundError`, suggesting cost classes and similar regions that have pricing. Not every instance type has every cost class in every region, so never index pricing without checking.
   - `determine_constrained_resource()` — determines if CPU or memory is the limiting factor
   - `determine_instance_count_required()` — calculates how many instances are needed
-  - `calculate_cost()` — computes hourly/monthly/yearly costs
-  - `calculate_estimate()` — runs the whole pipeline (rejecting shared-core instance types) and returns the result dict that `render` and the TUI consume. Every user-facing problem it finds is an `EstimateError`.
+  - `calculate_cost()` — computes hourly/monthly/yearly costs for whole nodes
+  - `resource_prices()` — the per-vCPU and per-GiB prices of an instance type, for bin-packed estimates. Uses `instances.json`'s top-level `resource_prices` when the scraper has recorded them, otherwise `derive_resource_prices()` solves for them with a least squares fit over the family's machine types (skipping `SHARED_CORE_INSTANCE_TYPES`). Either way they must reproduce the machine type prices to within 1% (`adds_up()`), or there's no bin-packed estimate: that rules out families with a single memory-to-vCPU ratio and GPU families.
+  - `calculate_resource_cost()` — the bin-packed cost by resource and in total, divided by the packing efficiency
+  - `calculate_estimate()` — runs the whole pipeline (rejecting shared-core instance types) and returns the result dict that `render` and the TUI consume, including `resource_costs` (None when the pricing can't be split). Every user-facing problem it finds is an `EstimateError`.
 - **`render.py`**: Output dispatching for `english` (human-readable) and `json` formats.
-- **`tui.py`**: `SkroogeApp`, a Textual app with an input form, an estimate panel (every cost class for the selected workload), and a workloads table with a net total. `Workload` keeps numeric fields as the text typed, and `estimate_workload()` validates them before calling `calculate_estimate()`. In the TUI a negative change to the constrained resource counts as a saving; the CLI reports magnitudes only.
+- **`tui.py`**: `SkroogeApp`, a Textual app with an input form, an estimate panel (both cost models and every cost class for the selected workload), a settings bar, and a workloads table with a net total. `Workload` keeps numeric fields as the text typed, and `estimate_workload()` validates them before calling `calculate_estimate()`. `Settings` holds the cluster-wide cost model (`whole-nodes` or `bin-packed`) and packing efficiency, saved in the workloads file next to the workloads. In the TUI a negative change counts as a saving: with whole nodes, the sign of the constrained resource's change decides; bin-packed, each resource is signed by its own change (`signed_resource_costs()`). The CLI reports magnitudes only.
 
 Data flow: CLI parses args → `calculate_estimate()` → result dict to render. The TUI recalculates every workload with `calculate_estimate()` on each input change.
 
@@ -101,7 +103,7 @@ Tests use `pytest`, configured in the native `[tool.pytest]` table in `pyproject
 
 - `tests/test_skrooge.py`: CLI integration tests (version flag, invalid input handling, negative value normalization, cost output verification, verbosity logging)
 - `tests/test_utils.py`: Unit tests for `determine_constrained_resource` and `determine_instance_count_required` with a c2-standard-30 fixture, plus instance lookup and `calculate_estimate` against the bundled data
-- `tests/test_tui.py`: Drives `SkroogeApp` headlessly with `App.run_test()`. Async tests are wrapped by the `app_test` decorator, which runs them with `asyncio.run`, so no pytest-asyncio is needed.
+- `tests/test_tui.py`: Drives `SkroogeApp` headlessly with `App.run_test()`, in both cost models. Async tests are wrapped by the `app_test` decorator, which runs them with `asyncio.run`, so no pytest-asyncio is needed.
 
 The constrained-resource and instance-count unit tests use a hardcoded `c2_standard_30_instance_data` dict rather than loading from `instances.json`.
 

@@ -13,18 +13,23 @@ from textual.widgets import DataTable, Footer, Header, Input, Label, Select, Sta
 
 from .utils import (
     COST_CLASSES,
+    PERIODS,
     EstimateError,
     InstanceNotFoundError,
     available_regions,
     calculate_cost,
     calculate_estimate,
+    calculate_resource_cost,
     find_instance_data,
     hourly_price,
     instance_names,
     load_instance_types,
+    resource_prices,
 )
 
 NUMERIC_FIELDS = ("replicas", "cpu", "mem")
+
+COST_MODELS = {"whole-nodes": "whole nodes", "bin-packed": "bin-packed"}
 
 COLUMNS = [
     ("name", "Workload"),
@@ -40,6 +45,26 @@ COLUMNS = [
 ]
 
 _keys = count()
+
+
+def from_dict(cls, data, what):
+    "Build a Workload or Settings from a workloads file, keeping values as text"
+    if not isinstance(data, dict):
+        raise TypeError(f"each {what} must be an object")
+    unknown = data.keys() - {f.name for f in fields(cls)}
+    if unknown:
+        raise ValueError(f"unknown {what} fields: {', '.join(sorted(unknown))}")
+    return cls(**{name: str(value) for name, value in data.items()})
+
+
+def to_dict(instance, numeric_fields):
+    "The fields of a Workload or Settings, with valid numbers as numbers"
+    data = asdict(instance)
+    for name in numeric_fields:
+        value = parse_int(data[name])
+        if value is not None:
+            data[name] = value
+    return data
 
 
 @dataclass
@@ -59,12 +84,7 @@ class Workload:
 
     @classmethod
     def from_dict(cls, data):
-        if not isinstance(data, dict):
-            raise TypeError("each workload must be an object")
-        unknown = data.keys() - {f.name for f in fields(cls)}
-        if unknown:
-            raise ValueError(f"unknown workload fields: {', '.join(sorted(unknown))}")
-        workload = cls(**{name: str(value) for name, value in data.items()})
+        workload = from_dict(cls, data, "workload")
         if workload.region not in available_regions():
             raise ValueError(f"unknown region: {workload.region}")
         if workload.cost_class not in COST_CLASSES:
@@ -72,27 +92,45 @@ class Workload:
         return workload
 
     def to_dict(self):
-        data = asdict(self)
-        for name in NUMERIC_FIELDS:
-            value = parse_int(data[name])
-            if value is not None:
-                data[name] = value
-        return data
+        return to_dict(self, NUMERIC_FIELDS)
+
+
+@dataclass
+class Settings:
+    # Properties of the cluster, so shared by every workload
+    cost_model: str = "whole-nodes"
+    packing_efficiency: str = "100"
+
+    @classmethod
+    def from_dict(cls, data):
+        settings = from_dict(cls, data, "settings")
+        if settings.cost_model not in COST_MODELS:
+            raise ValueError(f"unknown cost model: {settings.cost_model}")
+        return settings
+
+    def to_dict(self):
+        return to_dict(self, ["packing_efficiency"])
+
+    def efficiency(self):
+        "The packing efficiency as a percentage, or None if it isn't valid"
+        efficiency = parse_int(self.packing_efficiency)
+        return efficiency if efficiency is not None and 1 <= efficiency <= 100 else None
 
 
 def load_workloads(path):
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        workloads = data["workloads"]
-    except (TypeError, KeyError):
-        raise TypeError('expected an object with a "workloads" list') from None
-    if not isinstance(workloads, list):
+    "Returns the workloads and settings in a workloads file"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or not isinstance(data.get("workloads"), list):
         raise TypeError('expected an object with a "workloads" list')
-    return [Workload.from_dict(workload) for workload in workloads]
+    workloads = [Workload.from_dict(workload) for workload in data.pop("workloads")]
+    return workloads, Settings.from_dict(data)
 
 
-def save_workloads(path, workloads):
-    data = {"workloads": [workload.to_dict() for workload in workloads]}
+def save_workloads(path, workloads, settings):
+    data = {
+        **settings.to_dict(),
+        "workloads": [workload.to_dict() for workload in workloads],
+    }
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
@@ -103,7 +141,7 @@ def parse_int(value):
         return None
 
 
-def estimate_workload(instance_types, workload):
+def estimate_workload(instance_types, workload, packing_efficiency=100):
     "Returns (data, error), exactly one of which is None"
     replicas = parse_int(workload.replicas)
     if replicas is None or replicas < 0:
@@ -126,16 +164,62 @@ def estimate_workload(instance_types, workload):
             mem,
             cost_class=workload.cost_class,
             region=workload.region,
+            packing_efficiency=packing_efficiency,
         )
     except EstimateError as e:
         return None, str(e)
     return data, None
 
 
+def sign(change):
+    return -1 if change < 0 else 1
+
+
 def direction(data):
     "-1 if the workload shrinks the resource it's bound by (a saving), else 1"
     change = data["cpu"] if data["constrained_resource"] == "cores" else data["mem"]
-    return -1 if change < 0 else 1
+    return sign(change)
+
+
+def signed_resource_costs(data, resource_costs):
+    """Bin-packed costs by period, where each resource is a cost or a saving
+    on its own, so trading memory for CPU nets out"""
+    signs = {"cores": sign(data["cpu"]), "memory": sign(data["mem"])}
+    return {
+        period: round(
+            sum(
+                signs[resource] * resource_costs[resource][period] for resource in signs
+            ),
+            2,
+        )
+        for period in PERIODS
+    }
+
+
+def model_costs(data, cost_model, packing_efficiency):
+    """A workload's signed node count and costs by period under a cost model, or
+    None if it can't be bin-packed. Bin-packed nodes are node-equivalents."""
+    if cost_model == "whole-nodes":
+        factor = direction(data)
+        return {
+            "nodes": factor * data["required_instance_count"],
+            **{period: factor * data["costs"][period] for period in PERIODS},
+        }
+    if packing_efficiency is None or data["resource_costs"] is None:
+        return None
+    costs = signed_resource_costs(data, data["resource_costs"])
+    prices, specs = data["resource_prices"], data["instance_specs"]
+    node_price = specs["cores"] * prices["cores"] + specs["memory"] * prices["memory"]
+    costs["nodes"] = costs["hourly"] / node_price
+    return costs
+
+
+def all_model_costs(data, packing_efficiency):
+    if data is None:
+        return None
+    return {
+        model: model_costs(data, model, packing_efficiency) for model in COST_MODELS
+    }
 
 
 def quantity(amount):
@@ -143,11 +227,23 @@ def quantity(amount):
 
 
 def money(amount, decimals=0):
-    sign = "-" if amount < 0 else ""
-    return f"{sign}${abs(amount):,.{decimals}f}"
+    prefix = "-" if amount < 0 else ""
+    return f"{prefix}${abs(amount):,.{decimals}f}"
 
 
-def row_cells(workload, data, error):
+def nodes(count):
+    return str(count) if isinstance(count, int) else f"{count:.1f}"
+
+
+def model_label(cost_model, packing_efficiency):
+    if cost_model == "whole-nodes":
+        return "with whole nodes"
+    if packing_efficiency is None:
+        return "bin-packed"
+    return f"bin-packed at {packing_efficiency}%"
+
+
+def row_cells(workload, error, costs):
     cells = [
         workload.name or "(unnamed)",
         workload.replicas,
@@ -159,39 +255,59 @@ def row_cells(workload, data, error):
     ]
     if error:
         return [*cells, Text("⚠ invalid", style="bold red"), "", ""]
-    sign = direction(data)
-    style = "green" if sign < 0 else ""
-    costs = data["costs"]
+    if costs is None:
+        return [*cells, Text("n/a", style="dim", justify="right"), "", ""]
+    style = "green" if costs["hourly"] < 0 else ""
     return [
         *cells,
-        Text(str(sign * data["required_instance_count"]), style, justify="right"),
-        Text(money(sign * costs["monthly"]), style, justify="right"),
-        Text(money(sign * costs["yearly"]), style, justify="right"),
+        Text(nodes(costs["nodes"]), style, justify="right"),
+        Text(money(costs["monthly"]), style, justify="right"),
+        Text(money(costs["yearly"]), style, justify="right"),
     ]
 
 
-def total_text(results):
-    estimates = [data for data, _ in results if data]
+def total_text(costs, settings):
+    "The net change across workloads, given each one's all_model_costs()"
+    model, efficiency = settings.cost_model, settings.efficiency()
+    estimated = [workload for workload in costs if workload]
+    included = [workload[model] for workload in estimated if workload[model]]
     hourly, monthly, yearly = (
-        sum(direction(data) * data["costs"][period] for data in estimates)
-        for period in ("hourly", "monthly", "yearly")
+        sum(workload[period] for workload in included) for period in PERIODS
     )
     text = Text.assemble(
         ("Net change: ", "bold"),
         (f"{money(hourly, 2)}/h · {money(monthly)}/mo · {money(yearly)}/yr", "bold"),
-        f" across {len(estimates)} workload{'s' if len(estimates) != 1 else ''}",
+        f" {model_label(model, efficiency)}",
+        f" across {len(included)} workload{'s' if len(included) != 1 else ''}",
     )
-    invalid = len(results) - len(estimates)
+    # Show the other model's total to compare, if both cover every workload
+    other = next(m for m in COST_MODELS if m != model)
+    if estimated and all(all(workload.values()) for workload in estimated):
+        other_monthly = sum(workload[other]["monthly"] for workload in estimated)
+        text.append(
+            f" ({model_label(other, efficiency)}: {money(other_monthly)}/mo)", "dim"
+        )
+    invalid = len(costs) - len(estimated)
     if invalid:
         text.append(
             f"  ⚠ {invalid} workload{'s' if invalid != 1 else ''} with invalid inputs not included",
             "bold red",
         )
+    if model == "bin-packed" and efficiency is None:
+        text.append(
+            "  ⚠ Packing efficiency must be a whole number from 1 to 100", "bold red"
+        )
+    elif len(included) < len(estimated):
+        unpackable = len(estimated) - len(included)
+        text.append(
+            f"  ⚠ {unpackable} workload{'s' if unpackable != 1 else ''} can't be bin-packed, not included",
+            "bold red",
+        )
     return text
 
 
-def labelled(label, widget):
-    return Horizontal(Label(label), widget, classes="field")
+def labelled(label, widget, classes="field"):
+    return Horizontal(Label(label), widget, classes=classes)
 
 
 class SkroogeApp(App):
@@ -200,6 +316,7 @@ class SkroogeApp(App):
     CSS = """
     #top {
         height: auto;
+        max-height: 50%;
     }
     #inputs {
         width: 44;
@@ -210,6 +327,8 @@ class SkroogeApp(App):
     #estimate {
         width: 1fr;
         height: auto;
+        max-height: 100%;
+        overflow-y: auto;
         border: round $primary;
         padding: 0 1;
     }
@@ -231,6 +350,24 @@ class SkroogeApp(App):
         height: auto;
         margin-top: 1;
     }
+    #settings {
+        height: 1;
+        padding: 0 2;
+    }
+    .setting {
+        width: auto;
+        margin-right: 4;
+    }
+    .setting Label {
+        margin-right: 1;
+        color: $text-muted;
+    }
+    #cost_model {
+        width: 17;
+    }
+    #packing_efficiency {
+        width: 6;
+    }
     #table {
         height: 1fr;
         min-height: 5;
@@ -243,16 +380,19 @@ class SkroogeApp(App):
     BINDINGS = (
         Binding("ctrl+n", "add_workload", "Add workload", priority=True),
         Binding("ctrl+r", "remove_workload", "Remove workload", priority=True),
+        Binding("ctrl+b", "toggle_cost_model", "Cost model", priority=True),
         Binding("ctrl+s", "save", "Save", priority=True),
     )
 
-    def __init__(self, workloads, path, instance_types=None):
+    def __init__(self, workloads, path, instance_types=None, settings=None):
         super().__init__()
         self.instance_types = instance_types or load_instance_types()
         self.workloads = list(workloads) or [Workload()]
+        self.settings = settings or Settings()
         self.path = path
         self.selected = 0
         self.results = []
+        self.costs = []
         self.dirty = False
         self.quit_warned = False
 
@@ -327,17 +467,39 @@ class SkroogeApp(App):
             with Vertical(id="estimate"):
                 yield Static(id="summary")
                 yield DataTable(id="tiers", cursor_type="none")
+        with Horizontal(id="settings"):
+            yield labelled(
+                "Cost model",
+                Select(
+                    [(label, model) for model, label in COST_MODELS.items()],
+                    value=self.settings.cost_model,
+                    id="cost_model",
+                    allow_blank=False,
+                    compact=True,
+                ),
+                classes="setting",
+            )
+            yield labelled(
+                "Packing efficiency (%)",
+                Input(
+                    self.settings.packing_efficiency,
+                    id="packing_efficiency",
+                    type="integer",
+                    validators=[Integer(minimum=1, maximum=100)],
+                    compact=True,
+                ),
+                classes="setting",
+            )
         yield DataTable(id="table", cursor_type="row", zebra_stripes=True)
         yield Static(id="total")
         yield Footer()
 
     def on_mount(self):
         self.query_one("#inputs").border_title = "Inputs"
-        self.query_one("#table").border_title = "Workloads"
         tiers = self.query_one("#tiers", DataTable)
         tiers.can_focus = False
         tiers.add_column("Cost class")
-        for label in ("$/node/h", "$/hour", "$/month", "$/year"):
+        for label in ("$/node/h", "$/vCPU/h", "$/GiB/h", "Nodes $/mo", "Packed $/mo"):
             tiers.add_column(Text(label, justify="right"))
         table = self.query_one("#table", DataTable)
         for key, label in COLUMNS:
@@ -346,31 +508,41 @@ class SkroogeApp(App):
         self.select(0)
 
     def refresh_estimates(self):
+        efficiency = self.settings.efficiency()
         self.results = [
-            estimate_workload(self.instance_types, workload)
+            estimate_workload(self.instance_types, workload, efficiency or 100)
             for workload in self.workloads
         ]
+        self.costs = [all_model_costs(data, efficiency) for data, _ in self.results]
         table = self.query_one("#table", DataTable)
-        for workload, (data, error) in zip(self.workloads, self.results, strict=True):
-            cells = row_cells(workload, data, error)
+        table.border_title = (
+            f"Workloads · {model_label(self.settings.cost_model, efficiency)}"
+        )
+        for workload, (_, error), costs in zip(
+            self.workloads, self.results, self.costs, strict=True
+        ):
+            cells = row_cells(
+                workload, error, costs and costs[self.settings.cost_model]
+            )
             if workload.key in table.rows:
                 for (column, _), cell in zip(COLUMNS, cells, strict=True):
                     table.update_cell(workload.key, column, cell, update_width=True)
             else:
                 table.add_row(*cells, key=workload.key)
-        self.query_one("#total", Static).update(total_text(self.results))
+        self.query_one("#total", Static).update(total_text(self.costs, self.settings))
         self.show_estimate()
 
     def show_estimate(self):
         workload = self.workloads[self.selected]
         data, error = self.results[self.selected]
+        costs = self.costs[self.selected]
+        efficiency = self.settings.efficiency()
         self.query_one(
             "#estimate"
         ).border_title = f"Estimate · {workload.name or '(unnamed)'}"
+        instance = workload.instance.strip().lower()
         try:
-            instance_data = find_instance_data(
-                self.instance_types, workload.instance.strip().lower()
-            )
+            instance_data = find_instance_data(self.instance_types, instance)
         except InstanceNotFoundError:
             instance_data = None
 
@@ -378,22 +550,16 @@ class SkroogeApp(App):
             summary = Text(error, "red")
         else:
             specs = data["instance_specs"]
-            sign = direction(data)
             summary = Text.assemble(
                 (data["instance"], "bold"),
                 f": {specs['cores']} cores, {specs['memory']} GiB per node\n",
                 f"Needs {quantity(data['delta_cpu'] / 1000)} cores and "
                 f"{quantity(data['delta_mem'] / 1024)} GiB in total "
-                f"({'CPU' if data['constrained_resource'] == 'cores' else 'memory'}-bound)\n",
-                (
-                    (
-                        f"{'Frees' if sign < 0 else 'Adds'} "
-                        f"{data['required_instance_count']} node"
-                        f"{'s' if data['required_instance_count'] != 1 else ''}"
-                    ),
-                    "bold green" if sign < 0 else "bold",
-                ),
+                f"({'CPU' if data['constrained_resource'] == 'cores' else 'memory'}-bound)",
             )
+            for model in COST_MODELS:
+                summary.append("\n")
+                summary.append_text(self.model_summary(data, costs, model, efficiency))
         self.query_one("#summary", Static).update(summary)
 
         tiers = self.query_one("#tiers", DataTable)
@@ -403,29 +569,38 @@ class SkroogeApp(App):
             label = Text(
                 f"{'▶' if current else ' '} {cost_class}", "bold" if current else ""
             )
-            price = (
-                hourly_price(instance_data, cost_class, workload.region)
-                if instance_data
-                else None
+            price = instance_data and hourly_price(
+                instance_data, cost_class, workload.region
             )
-            if price is None:
-                cells = ["n/a", "", "", ""]
-            elif data is None:
-                cells = [money(price, 2), "—", "—", "—"]
+            prices = price and resource_prices(
+                self.instance_types, instance, cost_class, workload.region
+            )
+            if not price:
+                cells = ["n/a", "", "", "", ""]
             else:
-                sign = direction(data)
-                costs = calculate_cost(
-                    instance_data,
-                    data["required_instance_count"],
-                    cost_class=cost_class,
-                    region=workload.region,
+                cells = [money(price, 2)]
+                cells += (
+                    [money(prices["cores"], 4), money(prices["memory"], 4)]
+                    if prices
+                    else ["n/a", "n/a"]
                 )
-                cells = [
-                    money(price, 2),
-                    money(sign * costs["hourly"], 2),
-                    money(sign * costs["monthly"]),
-                    money(sign * costs["yearly"]),
-                ]
+                if data is None:
+                    cells += ["—", "—"]
+                else:
+                    count = data["required_instance_count"]
+                    whole = calculate_cost(
+                        instance_data, count, cost_class, workload.region
+                    )
+                    cells.append(money(direction(data) * whole["monthly"]))
+                    if prices and efficiency:
+                        packed = calculate_resource_cost(
+                            prices, data["delta_cpu"], data["delta_mem"], efficiency
+                        )
+                        cells.append(
+                            money(signed_resource_costs(data, packed)["monthly"])
+                        )
+                    else:
+                        cells.append("n/a")
             tiers.add_row(
                 label,
                 *(
@@ -433,6 +608,41 @@ class SkroogeApp(App):
                     for cell in cells
                 ),
             )
+
+    def model_summary(self, data, costs, model, efficiency):
+        "One line on the selected workload's cost under a cost model"
+        active = model == self.settings.cost_model
+        text = Text(
+            f"{'▶' if active else ' '} {model_label(model, efficiency).capitalize()}: "
+        )
+        model_costs = costs[model]
+        if model_costs is None:
+            text.append(
+                "enter a packing efficiency from 1 to 100"
+                if efficiency is None
+                else f"skrooge can't split {data['instance']} pricing into cores and memory",
+                "dim",
+            )
+            return text
+        style = ("bold " if active else "") + (
+            "green" if model_costs["hourly"] < 0 else ""
+        )
+        count = model_costs["nodes"]
+        worth = "" if model == "whole-nodes" else "' worth"
+        text.append(
+            f"{nodes(count)} node{'s' if count != 1 else ''}{worth} · "
+            f"{money(model_costs['hourly'], 2)}/h · {money(model_costs['monthly'])}/mo · "
+            f"{money(model_costs['yearly'])}/yr",
+            style,
+        )
+        if model == "bin-packed":
+            parts = data["resource_costs"]
+            text.append(
+                f"\n    cores {money(sign(data['cpu']) * parts['cores']['monthly'])}/mo"
+                f" · memory {money(sign(data['mem']) * parts['memory']['monthly'])}/mo",
+                "dim",
+            )
+        return text
 
     def select(self, index):
         self.selected = index
@@ -448,24 +658,28 @@ class SkroogeApp(App):
         self.dirty = True
         self.quit_warned = False
 
-    def update_selected(self, name, value):
-        workload = self.workloads[self.selected]
-        # Filling in the form in select() also posts Changed events, which may
-        # arrive after the selection has moved on. Handlers pass the widget's
-        # current value, so those events are no-ops here.
-        if getattr(workload, name) == value:
+    def field_changed(self, widget):
+        # Only the form and settings; the command palette's input bubbles up too
+        if widget.parent.has_class("field"):
+            target = self.workloads[self.selected]
+        elif widget.parent.has_class("setting"):
+            target = self.settings
+        else:
             return
-        setattr(workload, name, value)
+        # Filling in the form in select() also posts Changed events, which may
+        # arrive after the selection has moved on. Reading the widget's current
+        # value rather than the event's makes those no-ops.
+        if getattr(target, widget.id) == widget.value:
+            return
+        setattr(target, widget.id, widget.value)
         self.mark_dirty()
         self.refresh_estimates()
 
     def on_input_changed(self, event):
-        # Only the form's inputs; the command palette's input bubbles up too
-        if event.input.parent.has_class("field"):
-            self.update_selected(event.input.id, event.input.value)
+        self.field_changed(event.input)
 
     def on_select_changed(self, event):
-        self.update_selected(event.select.id, event.select.value)
+        self.field_changed(event.select)
 
     def on_data_table_row_highlighted(self, event):
         if event.data_table.id != "table":
@@ -475,6 +689,10 @@ class SkroogeApp(App):
         index = event.data_table.cursor_row
         if index != self.selected and 0 <= index < len(self.workloads):
             self.select(index)
+
+    def action_toggle_cost_model(self):
+        select = self.query_one("#cost_model", Select)
+        select.value = next(model for model in COST_MODELS if model != select.value)
 
     def action_add_workload(self):
         names = {workload.name for workload in self.workloads}
@@ -503,7 +721,7 @@ class SkroogeApp(App):
 
     def action_save(self):
         try:
-            save_workloads(self.path, self.workloads)
+            save_workloads(self.path, self.workloads, self.settings)
         except OSError as e:
             self.notify(f"Couldn't save to {self.path}: {e}", severity="error")
             return
@@ -522,11 +740,25 @@ class SkroogeApp(App):
         self.exit()
 
     def summary_table(self):
+        efficiency = self.settings.efficiency()
         results = [
-            estimate_workload(self.instance_types, workload)
+            estimate_workload(self.instance_types, workload, efficiency or 100)
             for workload in self.workloads
         ]
-        table = Table(*(label for _, label in COLUMNS), caption=total_text(results))
-        for workload, (data, error) in zip(self.workloads, results, strict=True):
-            table.add_row(*row_cells(workload, data, error))
+        costs = [all_model_costs(data, efficiency) for data, _ in results]
+        table = Table(
+            *(label for _, label in COLUMNS),
+            title=f"Workloads {model_label(self.settings.cost_model, efficiency)}",
+            caption=total_text(costs, self.settings),
+        )
+        for workload, (_, error), workload_costs in zip(
+            self.workloads, results, costs, strict=True
+        ):
+            table.add_row(
+                *row_cells(
+                    workload,
+                    error,
+                    workload_costs and workload_costs[self.settings.cost_model],
+                )
+            )
         return table

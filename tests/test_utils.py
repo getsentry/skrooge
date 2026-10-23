@@ -7,8 +7,10 @@ from skrooge.utils import (
     determine_constrained_resource,
     determine_instance_count_required,
     find_instance_data,
+    hourly_price,
     instance_names,
     load_instance_types,
+    resource_prices,
 )
 
 c2_standard_30_instance_data = {
@@ -429,3 +431,113 @@ def test_instance_names_excludes_licenses():
     names = instance_names(load_instance_types())
     assert "n2-standard-32" in names
     assert "rhel" not in names
+
+
+def web_estimate(packing_efficiency=100):
+    return calculate_estimate(
+        load_instance_types(),
+        "n2-standard-32",
+        replicas=30,
+        cpu=2500,
+        mem=2024,
+        cost_class="sud",
+        region="us-central1",
+        packing_efficiency=packing_efficiency,
+    )
+
+
+def test_resource_prices_add_up_to_instance_prices():
+    instance_types = load_instance_types()
+    prices = resource_prices(instance_types, "n2-standard-32", "sud", "us-central1")
+    assert prices["cores"] == pytest.approx(0.02529, abs=1e-5)
+    assert prices["memory"] == pytest.approx(0.00339, abs=1e-5)
+    for instance in ("n2-standard-32", "n2-highmem-16", "n2-highcpu-8"):
+        instance_data = instance_types["n2"][instance]
+        specs = instance_data["specs"]
+        assert specs["cores"] * prices["cores"] + specs["memory"] * prices[
+            "memory"
+        ] == pytest.approx(hourly_price(instance_data, "sud", "us-central1"), rel=1e-3)
+
+
+def test_resource_prices_ignore_shared_core_instance_types():
+    # e2-micro and friends are priced for a fraction of their 2 vCPUs
+    instance_types = load_instance_types()
+    assert resource_prices(instance_types, "e2-standard-4", "ondemand", "us-central1")
+    assert not resource_prices(instance_types, "e2-micro", "ondemand", "us-central1")
+
+
+@pytest.mark.parametrize(
+    ("instance", "cost_class"),
+    [
+        # Every c2 machine type has 4 GiB per vCPU, so the prices can't be told apart
+        ("c2-standard-30", "sud"),
+        # GPU machine type prices include their GPUs
+        ("a2-highgpu-1g", "ondemand"),
+        ("g2-standard-4", "ondemand"),
+    ],
+)
+def test_resource_prices_unavailable(instance, cost_class):
+    assert (
+        resource_prices(load_instance_types(), instance, cost_class, "us-central1")
+        is None
+    )
+
+
+def with_recorded_prices(prices):
+    return {
+        **load_instance_types(),
+        "resource_prices": {"n2": {"us-central1": {"sud": prices}}},
+    }
+
+
+def test_resource_prices_prefer_recorded_prices():
+    derived = resource_prices(
+        load_instance_types(), "n2-standard-32", "sud", "us-central1"
+    )
+    recorded = {"cores": derived["cores"] * 1.005, "memory": derived["memory"] * 1.005}
+    instance_types = with_recorded_prices(recorded)
+    assert (
+        resource_prices(instance_types, "n2-standard-32", "sud", "us-central1")
+        == recorded
+    )
+    assert "resource_prices" not in instance_names(instance_types)
+
+
+def test_resource_prices_reject_recorded_prices_that_dont_add_up():
+    instance_types = with_recorded_prices({"cores": 0.05, "memory": 0.007})
+    assert (
+        resource_prices(instance_types, "n2-standard-32", "sud", "us-central1") is None
+    )
+
+
+def test_calculate_estimate_resource_costs():
+    data = web_estimate()
+    assert data["packing_efficiency"] == 100
+    # 75 cores and 59.3 GiB
+    assert data["resource_costs"] == {
+        "cores": {"hourly": 1.9, "monthly": 1385, "yearly": 16615},
+        "memory": {"hourly": 0.2, "monthly": 147, "yearly": 1761},
+        "total": {"hourly": 2.1, "monthly": 1532, "yearly": 18376},
+    }
+
+
+def test_packing_efficiency_scales_resource_costs():
+    full, half = web_estimate()["resource_costs"], web_estimate(50)["resource_costs"]
+    for part in ("cores", "memory", "total"):
+        assert half[part]["monthly"] == pytest.approx(2 * full[part]["monthly"], abs=2)
+    # Whole nodes are already paid for in full
+    assert web_estimate(50)["costs"] == web_estimate()["costs"]
+
+
+def test_calculate_estimate_without_resource_prices():
+    data = calculate_estimate(
+        load_instance_types(),
+        "c2-standard-30",
+        replicas=30,
+        cpu=2500,
+        mem=2024,
+        cost_class="sud",
+        region="us-central1",
+    )
+    assert data["resource_prices"] is None
+    assert data["resource_costs"] is None

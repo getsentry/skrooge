@@ -67,13 +67,22 @@ def cli():
     default="us-central1",
 )
 @click.option(
+    "-p",
+    "--packing-efficiency",
+    help="For the bin-packed estimate, the percentage of the cluster's CPU and memory that pods request on average. Default: 100",
+    type=click.IntRange(1, 100),
+    default=100,
+)
+@click.option(
     "-f",
     "--format",
     help="The output format. Default: english",
     type=click.Choice(["english", "json"], case_sensitive=False),
     default="english",
 )
-def estimate(replicas, cpu, mem, instance, cost_class, region, format):
+def estimate(
+    replicas, cpu, mem, instance, cost_class, region, packing_efficiency, format
+):
     "Quick estimate of the cost or savings a kubernetes scale update will incur"
     logger.info(f"{replicas=}")
     logger.info(f"{cpu=}m")
@@ -92,6 +101,7 @@ def estimate(replicas, cpu, mem, instance, cost_class, region, format):
             mem,
             cost_class=cost_class,
             region=region,
+            packing_efficiency=packing_efficiency,
         )
     except EstimateError as e:
         raise click.BadParameter(str(e)) from None
@@ -116,16 +126,16 @@ def tui(workloads_file):
 
     from .tui import SkroogeApp, load_workloads
 
-    workloads = []
+    workloads, settings = [], None
     if workloads_file.exists():
         try:
-            workloads = load_workloads(workloads_file)
+            workloads, settings = load_workloads(workloads_file)
         except (OSError, TypeError, ValueError) as e:
             raise click.BadParameter(
                 f"{workloads_file}: {e}", param_hint="WORKLOADS_FILE"
             ) from None
 
-    app = SkroogeApp(workloads, workloads_file)
+    app = SkroogeApp(workloads, workloads_file, settings=settings)
     app.run()
     # Leave the final numbers in the terminal once the TUI is gone
     if app.return_code == 0:

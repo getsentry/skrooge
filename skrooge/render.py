@@ -21,6 +21,15 @@ def render_english(data):
     click.echo(
         f"This workload will require {data['required_instance_count']} instances, costing ${data['costs']['hourly']}/h (or ${data['costs']['monthly']}/m (or ${data['costs']['yearly']}/y)) at {data['costs']['class']} rates."
     )
+    resource_costs = data["resource_costs"]
+    if resource_costs:
+        click.echo(
+            f"Bin-packed in a cluster at {data['packing_efficiency']}% efficiency, this workload will cost ${resource_costs['total']['hourly']}/h (or ${resource_costs['total']['monthly']}/m (or ${resource_costs['total']['yearly']}/y)): ${resource_costs['cores']['monthly']}/m for cores and ${resource_costs['memory']['monthly']}/m for memory."
+        )
+    else:
+        click.echo(
+            f"skrooge can't split {data['instance']} pricing into cores and memory, so there's no bin-packed estimate."
+        )
 
 
 def render_json(data):
