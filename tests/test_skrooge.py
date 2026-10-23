@@ -283,3 +283,12 @@ def test_regions_for_invalid_instance_type_provides_similar_instances(instance_d
     result = runner.invoke(cli, ["regions", "--instance", "n2-standard-30"])
     assert result.exit_code == 2
     assert "n2-standard-30 not found. Did you mean: n2-standard-32" in result.output
+
+
+def test_invalid_instance_family_provides_similar_families(instance_data):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["regions", "--instance", "n9-standard-8"])
+    assert result.exit_code == 2
+    assert "n9 instance family not found. Did you mean:" in result.output
+    assert "n1" in result.output
+    assert "n2" in result.output
