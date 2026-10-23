@@ -1,0 +1,1257 @@
+{
+  "_comment": "Cloud Billing Catalog API responses for GET /v1/services/6F81-5844-456A/skus, in the API's documented shape. The descriptions follow Compute Engine's SKU naming, but the SKU IDs and prices are synthetic test values, not real GCP prices.",
+  "pages": [
+    {
+      "skus": [
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0001",
+          "skuId": "TEST-0000-0001",
+          "description": "N2 Instance Core running in Americas",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "CPU",
+            "usageType": "OnDemand"
+          },
+          "serviceRegions": [
+            "us-central1",
+            "us-east1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 30000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "hour",
+                "baseUnit": "s",
+                "baseUnitDescription": "second",
+                "baseUnitConversionFactor": 3600
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "MULTI_REGIONAL",
+            "regions": [
+              "us-central1",
+              "us-east1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0002",
+          "skuId": "TEST-0000-0002",
+          "description": "N2 Instance Ram running in Americas",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "RAM",
+            "usageType": "OnDemand"
+          },
+          "serviceRegions": [
+            "us-central1",
+            "us-east1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "GiBy.h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 4000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "gibibyte hour",
+                "baseUnit": "By.s",
+                "baseUnitDescription": "byte second",
+                "baseUnitConversionFactor": 3865470566400
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "MULTI_REGIONAL",
+            "regions": [
+              "us-central1",
+              "us-east1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0003",
+          "skuId": "TEST-0000-0003",
+          "description": "Spot Preemptible N2 Instance Core running in Americas",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "CPU",
+            "usageType": "Preemptible"
+          },
+          "serviceRegions": [
+            "us-central1",
+            "us-east1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 10000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "hour",
+                "baseUnit": "s",
+                "baseUnitDescription": "second",
+                "baseUnitConversionFactor": 3600
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "MULTI_REGIONAL",
+            "regions": [
+              "us-central1",
+              "us-east1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0004",
+          "skuId": "TEST-0000-0004",
+          "description": "Spot Preemptible N2 Instance Ram running in Americas",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "RAM",
+            "usageType": "Preemptible"
+          },
+          "serviceRegions": [
+            "us-central1",
+            "us-east1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "GiBy.h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 1000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "gibibyte hour",
+                "baseUnit": "By.s",
+                "baseUnitDescription": "byte second",
+                "baseUnitConversionFactor": 3865470566400
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "MULTI_REGIONAL",
+            "regions": [
+              "us-central1",
+              "us-east1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0005",
+          "skuId": "TEST-0000-0005",
+          "description": "Commitment v1: N2 Cpu in Americas for 1 Year",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "CPU",
+            "usageType": "Commit1Yr"
+          },
+          "serviceRegions": [
+            "us-central1",
+            "us-east1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 20000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "hour",
+                "baseUnit": "s",
+                "baseUnitDescription": "second",
+                "baseUnitConversionFactor": 3600
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "MULTI_REGIONAL",
+            "regions": [
+              "us-central1",
+              "us-east1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0006",
+          "skuId": "TEST-0000-0006",
+          "description": "Commitment v1: N2 Ram in Americas for 1 Year",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "RAM",
+            "usageType": "Commit1Yr"
+          },
+          "serviceRegions": [
+            "us-central1",
+            "us-east1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "GiBy.h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 3000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "gibibyte hour",
+                "baseUnit": "By.s",
+                "baseUnitDescription": "byte second",
+                "baseUnitConversionFactor": 3865470566400
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "MULTI_REGIONAL",
+            "regions": [
+              "us-central1",
+              "us-east1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0007",
+          "skuId": "TEST-0000-0007",
+          "description": "Commitment v1: N2 Cpu in Americas for 3 Year",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "CPU",
+            "usageType": "Commit3Yr"
+          },
+          "serviceRegions": [
+            "us-central1",
+            "us-east1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 15000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "hour",
+                "baseUnit": "s",
+                "baseUnitDescription": "second",
+                "baseUnitConversionFactor": 3600
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "MULTI_REGIONAL",
+            "regions": [
+              "us-central1",
+              "us-east1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0008",
+          "skuId": "TEST-0000-0008",
+          "description": "Commitment v1: N2 Ram in Americas for 3 Year",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "RAM",
+            "usageType": "Commit3Yr"
+          },
+          "serviceRegions": [
+            "us-central1",
+            "us-east1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "GiBy.h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 2000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "gibibyte hour",
+                "baseUnit": "By.s",
+                "baseUnitDescription": "byte second",
+                "baseUnitConversionFactor": 3865470566400
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "MULTI_REGIONAL",
+            "regions": [
+              "us-central1",
+              "us-east1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0009",
+          "skuId": "TEST-0000-0009",
+          "description": "N2 Instance Core running in Belgium",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "CPU",
+            "usageType": "OnDemand"
+          },
+          "serviceRegions": [
+            "europe-west1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 33000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "hour",
+                "baseUnit": "s",
+                "baseUnitDescription": "second",
+                "baseUnitConversionFactor": 3600
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "REGIONAL",
+            "regions": [
+              "europe-west1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0010",
+          "skuId": "TEST-0000-0010",
+          "description": "N2 Instance Ram running in Belgium",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "RAM",
+            "usageType": "OnDemand"
+          },
+          "serviceRegions": [
+            "europe-west1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "GiBy.h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 4400000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "gibibyte hour",
+                "baseUnit": "By.s",
+                "baseUnitDescription": "byte second",
+                "baseUnitConversionFactor": 3865470566400
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "REGIONAL",
+            "regions": [
+              "europe-west1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0011",
+          "skuId": "TEST-0000-0011",
+          "description": "N2 Custom Instance Core running in Americas",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "CPU",
+            "usageType": "OnDemand"
+          },
+          "serviceRegions": [
+            "us-central1",
+            "us-east1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 50000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "hour",
+                "baseUnit": "s",
+                "baseUnitDescription": "second",
+                "baseUnitConversionFactor": 3600
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "MULTI_REGIONAL",
+            "regions": [
+              "us-central1",
+              "us-east1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0012",
+          "skuId": "TEST-0000-0012",
+          "description": "N2 Sole Tenancy Instance Core running in Americas",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "CPU",
+            "usageType": "OnDemand"
+          },
+          "serviceRegions": [
+            "us-central1",
+            "us-east1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 60000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "hour",
+                "baseUnit": "s",
+                "baseUnitDescription": "second",
+                "baseUnitConversionFactor": 3600
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "MULTI_REGIONAL",
+            "regions": [
+              "us-central1",
+              "us-east1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0013",
+          "skuId": "TEST-0000-0013",
+          "description": "Storage PD Capacity",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Storage",
+            "resourceGroup": "SSD",
+            "usageType": "OnDemand"
+          },
+          "serviceRegions": [
+            "us-central1",
+            "us-east1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "GiBy.mo",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 40000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "hour",
+                "baseUnit": "s",
+                "baseUnitDescription": "second",
+                "baseUnitConversionFactor": 3600
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "MULTI_REGIONAL",
+            "regions": [
+              "us-central1",
+              "us-east1"
+            ]
+          }
+        }
+      ],
+      "nextPageToken": "page-2"
+    },
+    {
+      "skus": [
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0014",
+          "skuId": "TEST-0000-0014",
+          "description": "N1 Predefined Instance Core running in Americas",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "N1Standard",
+            "usageType": "OnDemand"
+          },
+          "serviceRegions": [
+            "us-central1",
+            "us-east1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 30000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "hour",
+                "baseUnit": "s",
+                "baseUnitDescription": "second",
+                "baseUnitConversionFactor": 3600
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "MULTI_REGIONAL",
+            "regions": [
+              "us-central1",
+              "us-east1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0015",
+          "skuId": "TEST-0000-0015",
+          "description": "N1 Predefined Instance Ram running in Americas",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "N1Standard",
+            "usageType": "OnDemand"
+          },
+          "serviceRegions": [
+            "us-central1",
+            "us-east1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "GiBy.h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 4000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "gibibyte hour",
+                "baseUnit": "By.s",
+                "baseUnitDescription": "byte second",
+                "baseUnitConversionFactor": 3865470566400
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "MULTI_REGIONAL",
+            "regions": [
+              "us-central1",
+              "us-east1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0016",
+          "skuId": "TEST-0000-0016",
+          "description": "Commitment v1: Cpu in Americas for 1 Year",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "CPU",
+            "usageType": "Commit1Yr"
+          },
+          "serviceRegions": [
+            "us-central1",
+            "us-east1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 20000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "hour",
+                "baseUnit": "s",
+                "baseUnitDescription": "second",
+                "baseUnitConversionFactor": 3600
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "MULTI_REGIONAL",
+            "regions": [
+              "us-central1",
+              "us-east1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0017",
+          "skuId": "TEST-0000-0017",
+          "description": "Commitment v1: Ram in Americas for 1 Year",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "RAM",
+            "usageType": "Commit1Yr"
+          },
+          "serviceRegions": [
+            "us-central1",
+            "us-east1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "GiBy.h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 3000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "gibibyte hour",
+                "baseUnit": "By.s",
+                "baseUnitDescription": "byte second",
+                "baseUnitConversionFactor": 3865470566400
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "MULTI_REGIONAL",
+            "regions": [
+              "us-central1",
+              "us-east1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0018",
+          "skuId": "TEST-0000-0018",
+          "description": "E2 Instance Core running in Americas",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "CPU",
+            "usageType": "OnDemand"
+          },
+          "serviceRegions": [
+            "us-central1",
+            "us-east1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 20000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "hour",
+                "baseUnit": "s",
+                "baseUnitDescription": "second",
+                "baseUnitConversionFactor": 3600
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "MULTI_REGIONAL",
+            "regions": [
+              "us-central1",
+              "us-east1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0019",
+          "skuId": "TEST-0000-0019",
+          "description": "E2 Instance Ram running in Americas",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "RAM",
+            "usageType": "OnDemand"
+          },
+          "serviceRegions": [
+            "us-central1",
+            "us-east1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "GiBy.h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 3000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "gibibyte hour",
+                "baseUnit": "By.s",
+                "baseUnitDescription": "byte second",
+                "baseUnitConversionFactor": 3865470566400
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "MULTI_REGIONAL",
+            "regions": [
+              "us-central1",
+              "us-east1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0020",
+          "skuId": "TEST-0000-0020",
+          "description": "Micro Instance with burstable CPU running in Americas",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "F1Micro",
+            "usageType": "OnDemand"
+          },
+          "serviceRegions": [
+            "us-central1",
+            "us-east1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 8000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "hour",
+                "baseUnit": "s",
+                "baseUnitDescription": "second",
+                "baseUnitConversionFactor": 3600
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "MULTI_REGIONAL",
+            "regions": [
+              "us-central1",
+              "us-east1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0021",
+          "skuId": "TEST-0000-0021",
+          "description": "Spot Preemptible Micro Instance with burstable CPU running in Americas",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "F1Micro",
+            "usageType": "Preemptible"
+          },
+          "serviceRegions": [
+            "us-central1",
+            "us-east1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 4000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "hour",
+                "baseUnit": "s",
+                "baseUnitDescription": "second",
+                "baseUnitConversionFactor": 3600
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "MULTI_REGIONAL",
+            "regions": [
+              "us-central1",
+              "us-east1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0022",
+          "skuId": "TEST-0000-0022",
+          "description": "A2 Instance Core running in Americas",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "CPU",
+            "usageType": "OnDemand"
+          },
+          "serviceRegions": [
+            "us-central1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 30000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "hour",
+                "baseUnit": "s",
+                "baseUnitDescription": "second",
+                "baseUnitConversionFactor": 3600
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "REGIONAL",
+            "regions": [
+              "us-central1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0023",
+          "skuId": "TEST-0000-0023",
+          "description": "A2 Instance Ram running in Americas",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "RAM",
+            "usageType": "OnDemand"
+          },
+          "serviceRegions": [
+            "us-central1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "GiBy.h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 4000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "gibibyte hour",
+                "baseUnit": "By.s",
+                "baseUnitDescription": "byte second",
+                "baseUnitConversionFactor": 3865470566400
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "REGIONAL",
+            "regions": [
+              "us-central1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0024",
+          "skuId": "TEST-0000-0024",
+          "description": "Nvidia Tesla A100 GPU running in Americas",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "GPU",
+            "usageType": "OnDemand"
+          },
+          "serviceRegions": [
+            "us-central1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "2",
+                      "nanos": 500000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "hour",
+                "baseUnit": "s",
+                "baseUnitDescription": "second",
+                "baseUnitConversionFactor": 3600
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "REGIONAL",
+            "regions": [
+              "us-central1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0025",
+          "skuId": "TEST-0000-0025",
+          "description": "Nvidia Tesla A100 GPU attached to Spot Preemptible VMs running in Americas",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "GPU",
+            "usageType": "Preemptible"
+          },
+          "serviceRegions": [
+            "us-central1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "1",
+                      "nanos": 250000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "hour",
+                "baseUnit": "s",
+                "baseUnitDescription": "second",
+                "baseUnitConversionFactor": 3600
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "REGIONAL",
+            "regions": [
+              "us-central1"
+            ]
+          }
+        },
+        {
+          "name": "services/6F81-5844-456A/skus/TEST-0000-0026",
+          "skuId": "TEST-0000-0026",
+          "description": "Small Instance with 1 VCPU running in Americas",
+          "category": {
+            "serviceDisplayName": "Compute Engine",
+            "resourceFamily": "Compute",
+            "resourceGroup": "G1Small",
+            "usageType": "OnDemand"
+          },
+          "serviceRegions": [
+            "us-central1"
+          ],
+          "pricingInfo": [
+            {
+              "summary": "",
+              "pricingExpression": {
+                "usageUnit": "h",
+                "displayQuantity": 1,
+                "tieredRates": [
+                  {
+                    "startUsageAmount": 0,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 0
+                    }
+                  },
+                  {
+                    "startUsageAmount": 744,
+                    "unitPrice": {
+                      "currencyCode": "USD",
+                      "units": "0",
+                      "nanos": 25000000
+                    }
+                  }
+                ],
+                "usageUnitDescription": "hour",
+                "baseUnit": "s",
+                "baseUnitDescription": "second",
+                "baseUnitConversionFactor": 3600
+              },
+              "currencyConversionRate": 1,
+              "effectiveTime": "2026-10-01T00:00:00Z"
+            }
+          ],
+          "serviceProviderName": "Google",
+          "geoTaxonomy": {
+            "type": "REGIONAL",
+            "regions": [
+              "us-central1"
+            ]
+          }
+        }
+      ],
+      "nextPageToken": ""
+    }
+  ]
+}

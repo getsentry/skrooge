@@ -1,11 +1,18 @@
 import logging
 import math
 
+logger = logging.getLogger(__name__)
+
 
 def determine_constrained_resource(instance_data, cpu, mem):
-    logging.info(
+    logger.info(
         f"Calculating constrained resource: {instance_data['specs']=}, {cpu=}, {mem=}"
     )
+    # A zero change in one resource means the other is the only constraint
+    if cpu == 0:
+        return "memory"
+    if mem == 0:
+        return "cores"
     if instance_data["specs"]["cores"] * 1000 / abs(cpu) > instance_data["specs"][
         "memory"
     ] * 1024 / abs(mem):
@@ -25,8 +32,8 @@ def determine_instance_count_required(
     resource_per_instance = (
         instance_data["specs"][constrained_resource] * normalization_factor
     )
-    logging.info(f"{resource_per_instance=}, {resource_requirement=}")
-    logging.info(f"{math.ceil(resource_requirement / resource_per_instance)=}")
+    logger.info(f"{resource_per_instance=}, {resource_requirement=}")
+    logger.info(f"{math.ceil(resource_requirement / resource_per_instance)=}")
     return math.ceil(resource_requirement / resource_per_instance)
 
 
