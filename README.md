@@ -82,9 +82,17 @@ To run the same checks automatically on each commit, install the [pre-commit](ht
     uv tool install pre-commit
     pre-commit install
 
-To update the instances.json file:
+### Updating prices
 
-    uv run --group scrape python skrooge/scraper.py > skrooge/instances.json
+The [Update instance data](.github/workflows/update-instances.yml) workflow runs daily. It regenerates `skrooge/instances.json` from GCP's [Cloud Billing Catalog API](https://cloud.google.com/billing/docs/how-to/get-pricing-information-api) and, when anything changed, opens or updates a pull request from the `automation/update-instances` branch. The pull request description reports added and removed machine types, regions and cost classes, and flags prices that changed by more than 20%; review those before merging. It needs a `GCP_BILLING_API_KEY` repository secret holding an API key that's restricted to the Cloud Billing API.
+
+To regenerate the data locally, with your own API key:
+
+    GCP_BILLING_API_KEY=... uv run python -m skrooge.scraper scrape --output new.json
+    uv run python -m skrooge.scraper diff skrooge/instances.json new.json
+    mv new.json skrooge/instances.json
+
+The scraper refuses to write output that fails validation, e.g. when a machine family has no prices. Machine type specs are hard-coded in `skrooge/machine_types.py`; add new machine types there.
 
 ## Releasing
 
