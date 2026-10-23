@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The price scraper now reads prices from GCP's Cloud Billing Catalog API, as the pricing calculator price list it used is gone. A daily workflow opens a pull request when prices change, with a report of what changed.
+
+### Added
+
+- `c4d`, `n4d` and `n4a` machine types, once `instances.json` is next regenerated
+
 ## [1.1.0] - 2026-10-22
 
 ### Fixed
