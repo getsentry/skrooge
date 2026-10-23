@@ -138,10 +138,13 @@ def _get_json(request, urlopen, attempts=4):
             with urlopen(request, timeout=60) as response:
                 return json.load(response)
         except urllib.error.HTTPError as e:
+            # Close the error's response body, which would otherwise leak
+            with e:
+                message = _api_error(e)
             retryable = e.code == 429 or e.code >= 500
             if not retryable or attempt == attempts - 1:
                 raise RuntimeError(
-                    f"Cloud Billing API request failed with HTTP {e.code}: {_api_error(e)}"
+                    f"Cloud Billing API request failed with HTTP {e.code}: {message}"
                 ) from None
         except urllib.error.URLError as e:
             if attempt == attempts - 1:
