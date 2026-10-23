@@ -23,6 +23,12 @@ def estimate_data():
             "class": "cud-1y",
             "region": "us-central1",
         },
+        "packing_efficiency": 80,
+        "resource_costs": {
+            "cores": {"hourly": 0.06, "monthly": 46, "yearly": 548},
+            "memory": {"hourly": 0.01, "monthly": 4, "yearly": 44},
+            "total": {"hourly": 0.07, "monthly": 50, "yearly": 592},
+        },
     }
 
 
@@ -49,7 +55,22 @@ def test_render_english(estimate_data, renderer, capsys):
             "This workload will require 2 instances, costing $0.25/h "
             "(or $182/m (or $2190/y)) at cud-1y rates."
         ),
+        (
+            "Bin-packed in a cluster at 80% efficiency, this workload will cost "
+            "$0.07/h (or $50/m (or $592/y)): $46/m for cores and $4/m for memory."
+        ),
     ]
+
+
+def test_render_english_without_bin_packed_estimate(estimate_data, capsys):
+    estimate_data["resource_costs"] = None
+
+    render_english(estimate_data)
+
+    assert capsys.readouterr().out.splitlines()[-1] == (
+        "skrooge can't split n2-standard-2 pricing into cores and memory, "
+        "so there's no bin-packed estimate."
+    )
 
 
 @pytest.mark.parametrize(
