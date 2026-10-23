@@ -339,17 +339,17 @@ def test_determine_constrained_resource_normalize_negative_values_as_absolutes()
     )
 
 
-def test_determine_constrained_resource_cpu_only():
+def test_determine_constrained_resource_zero_cpu_is_memory_bound():
     assert (
-        determine_constrained_resource(c2_standard_30_instance_data, cpu=1000, mem=0)
-        == "cores"
+        determine_constrained_resource(c2_standard_30_instance_data, cpu=0, mem=128)
+        == "memory"
     )
 
 
-def test_determine_constrained_resource_memory_only():
+def test_determine_constrained_resource_zero_mem_is_cpu_bound():
     assert (
-        determine_constrained_resource(c2_standard_30_instance_data, cpu=0, mem=1024)
-        == "memory"
+        determine_constrained_resource(c2_standard_30_instance_data, cpu=1000, mem=0)
+        == "cores"
     )
 
 

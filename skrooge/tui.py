@@ -13,9 +13,9 @@ from textual.widgets import DataTable, Footer, Header, Input, Label, Select, Sta
 
 from .utils import (
     COST_CLASSES,
-    REGIONS,
+    EstimateError,
     InstanceNotFoundError,
-    PricingNotFoundError,
+    available_regions,
     calculate_cost,
     calculate_estimate,
     find_instance_data,
@@ -65,7 +65,7 @@ class Workload:
         if unknown:
             raise ValueError(f"unknown workload fields: {', '.join(sorted(unknown))}")
         workload = cls(**{name: str(value) for name, value in data.items()})
-        if workload.region not in REGIONS:
+        if workload.region not in available_regions():
             raise ValueError(f"unknown region: {workload.region}")
         if workload.cost_class not in COST_CLASSES:
             raise ValueError(f"unknown cost class: {workload.cost_class}")
@@ -127,7 +127,7 @@ def estimate_workload(instance_types, workload):
             cost_class=workload.cost_class,
             region=workload.region,
         )
-    except (InstanceNotFoundError, PricingNotFoundError) as e:
+    except EstimateError as e:
         return None, str(e)
     return data, None
 
@@ -302,7 +302,7 @@ class SkroogeApp(App):
                 yield labelled(
                     "Region",
                     Select(
-                        [(region, region) for region in REGIONS],
+                        [(region, region) for region in available_regions()],
                         value=first.region,
                         id="region",
                         allow_blank=False,

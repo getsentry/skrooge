@@ -11,32 +11,20 @@ A quick and dirty kubernetes cost estimator
 *Ebenezer scrooge standing at the helm of a ship, pencil sketch*
 
 
-## Idea
+## Why
 
-I've been manually calculating how much scaling kubernetes deployments up or down will cost (or save!).
-It's a bit of grunt work every time pulling together our instance types, figuring out if the deployment is cpu-bound or memory-bound, and working out the cost.
-Instead we could have a CLI tool (or potentially automated during CI down the road) that could calculate these numbers for us.
+Scaling a Kubernetes deployment up or down changes how many nodes it needs, so it changes what you pay. Working that out by hand is grunt work every time: look up the node's machine type, figure out whether the change is CPU-bound or memory-bound, count the extra nodes, and price them. skrooge does that arithmetic for you using bundled GCP machine specs and regional pricing.
 
-Previous example (in english):
+For example, doubling a deployment of 2 CPU / 3GiB pods from 16 to 32 replicas on `c2-standard-30` nodes (30 cores, 120GiB) adds 32 cores and 48GiB of memory. CPU runs out first, so it needs `ceil(32 / 30) = 2` more nodes:
 
-It would be nice to have a CLI tool which could do these calculations for us (and integrate with GCP pricing / instance APIs to get instance shapes and costs automatically)
+    $ uvx skrooge estimate --replicas 16 --cpu 2000 --mem 3072 --instance c2-standard-30
+    This workload is running on c2-standard-30 instances in us-central1 with 30 cores and 120GiB of memory.
+    This workload will require 32.0 cores and 48.0 GiB of memory. This workload is cores-constrained.
+    This workload will require 2 instances, costing $2.51/h (or $1829/m (or $21950/y)) at sud rates.
 
-```
-Pod size: 2 cpu, 3GB RAM
-Previous deployment: 32 cpu, 48GB RAM
-New deployment: 64 cpu, 96GB RAM
-Running on c2-standard-30 which have 30 cpu, 120GiB RAM, and cost $914/month
-Up to 2 new instances to support +32 CPU, cost $1828 / month ($21,936 / year)
-```
+For a scale-down, pass the size of the reduction: the cost skrooge reports is what you'd save.
 
-How a CLI tool could work:
-
-```bash
-$ kubecost --cpu 32 --mem 48 --instance c2-standard-30
-c2-standard-30: 30 cpu, 120GiB RAM, $914/month
-Limiting factor: CPU (ceil(32/30) = 2)
-Cost: $1828 / month ($21,936 / year)
-```
+It's a quick estimate, not a bill. It assumes pods pack perfectly onto whole nodes, and it ignores the node capacity reserved for the system and DaemonSets, cluster autoscaler behaviour, and storage or network costs. Prices come from a snapshot in `skrooge/instances.json`, taken whenever that file was last regenerated.
 
 ## Installation
 
@@ -125,3 +113,14 @@ To run the same checks automatically on each commit, install the [pre-commit](ht
 To update the instances.json file:
 
     uv run --group scrape python skrooge/scraper.py > skrooge/instances.json
+
+## Releasing
+
+Releases are made with Sentry's [Craft](https://github.com/getsentry/craft) and follow [Semantic Versioning](https://semver.org/). Anything that drops support for a Python version needs at least a minor version bump.
+
+1. **Update the changelog.** Craft doesn't edit `CHANGELOG.md` for this project, so in a PR, rename the `## [Unreleased]` heading to `## [X.Y.Z] - YYYY-MM-DD`, add a new empty `## [Unreleased]` heading above it, and merge it to `main`. Make sure CI on `main` is green.
+2. **Start the release.** In GitHub, go to **Actions → Release → Run workflow**, run it on `main`, and enter the new version, e.g. `1.1.0`. Enter an explicit version: `auto` and bump keywords like `minor` need a newer `minVersion` in `.craft.yml` than this project sets. Leave **force** empty unless you need to release despite an open issue labelled `release-blocker`.
+3. **Craft prepares the release.** It creates a `release/X.Y.Z` branch from `main`, runs `scripts/bump-version.sh` (which uses `uv version` to update `pyproject.toml` and `uv.lock`), commits that as `release: X.Y.Z`, and opens a `publish: getsentry/skrooge@X.Y.Z` issue in [getsentry/publish](https://github.com/getsentry/publish).
+4. **CI builds the package.** The push to `release/X.Y.Z` runs the [Publish Python Package](.github/workflows/publish.yml) workflow, which runs the tests and uploads the built sdist and wheel as an artifact for Craft. Wait for it to pass; the publish issue links to the check runs.
+5. **Approve the release.** Add the `accepted` label to the publish issue. Craft then uploads the package to PyPI, tags the release and creates a GitHub release, and merges the release branch back into `main`. Nothing is published until the label is added, so to abandon a release, close the publish issue and delete the `release/X.Y.Z` branch.
+6. **Check it.** Once PyPI has the new version, `uvx skrooge@X.Y.Z --version` should print it.

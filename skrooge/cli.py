@@ -7,9 +7,8 @@ import click_log
 from .render import render
 from .utils import (
     COST_CLASSES,
-    REGIONS,
-    InstanceNotFoundError,
-    PricingNotFoundError,
+    EstimateError,
+    available_regions,
     calculate_estimate,
     load_instance_types,
 )
@@ -32,19 +31,22 @@ def cli():
     "-r",
     "--replicas",
     help="The number of replicas in the deployment",
-    type=click.INT,
+    type=click.IntRange(min=1),
+    required=True,
 )
 @click.option(
     "-c",
     "--cpu",
     help="The amount of CPU change in milli-cores",
     type=click.INT,
+    required=True,
 )
 @click.option(
     "-m",
     "--mem",
     help="The amount of memory change in MiB",
     type=click.INT,
+    required=True,
 )
 @click.option(
     "-i",
@@ -61,7 +63,7 @@ def cli():
 @click.option(
     "--region",
     help="The region to use for cost calculation. Default: us-central1",
-    type=click.Choice(REGIONS, case_sensitive=False),
+    type=click.Choice(available_regions(), case_sensitive=False),
     default="us-central1",
 )
 @click.option(
@@ -78,6 +80,9 @@ def estimate(replicas, cpu, mem, instance, cost_class, region, format):
     logger.info(f"{mem=}MiB")
     logger.info(f"{instance=}")
 
+    if cpu == 0 and mem == 0:
+        raise click.BadParameter("--cpu and --mem can't both be 0.")
+
     try:
         data = calculate_estimate(
             load_instance_types(),
@@ -88,7 +93,7 @@ def estimate(replicas, cpu, mem, instance, cost_class, region, format):
             cost_class=cost_class,
             region=region,
         )
-    except (InstanceNotFoundError, PricingNotFoundError) as e:
+    except EstimateError as e:
         raise click.BadParameter(str(e)) from None
 
     render(format=format, data=data)

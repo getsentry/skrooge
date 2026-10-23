@@ -5,6 +5,8 @@ from click.testing import CliRunner
 from skrooge import tui
 from skrooge.cli import cli
 
+REQUIRED_ARGS = ["--replicas", "30", "--cpu", "2500", "--mem", "2024"]
+
 
 def test_version():
     runner = CliRunner()
@@ -15,7 +17,9 @@ def test_version():
 
 def test_invalid_instance_type_provides_similar_instances():
     runner = CliRunner()
-    result = runner.invoke(cli, ["estimate", "--instance", "c2-standard-7"])
+    result = runner.invoke(
+        cli, ["estimate", *REQUIRED_ARGS, "--instance", "c2-standard-7"]
+    )
     assert result.exit_code == 2
     assert (
         "Error: Invalid value: c2-standard-7 not found. Did you mean:" in result.output
@@ -24,7 +28,9 @@ def test_invalid_instance_type_provides_similar_instances():
 
 def test_invalid_instance_type_provides_github_bug_report_link():
     runner = CliRunner()
-    result = runner.invoke(cli, ["estimate", "--instance", "c2-standard-7"])
+    result = runner.invoke(
+        cli, ["estimate", *REQUIRED_ARGS, "--instance", "c2-standard-7"]
+    )
     assert result.exit_code == 2
     assert (
         "https://github.com/getsentry/skrooge/issues/new?assignees=&labels=&projects=&template=BUG_REPORT.md"
@@ -86,26 +92,113 @@ def test_verbosity_includes_calculation_logs():
     assert "Calculating constrained resource" in result.output
 
 
-def test_missing_pricing_is_reported():
+def test_missing_required_options():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["estimate", "--instance", "n2-standard-32"])
+    assert result.exit_code == 2
+    assert "Missing option '-r' / '--replicas'" in result.output
+
+
+def test_replicas_must_be_positive():
     runner = CliRunner()
     result = runner.invoke(
         cli,
         [
             "estimate",
             "--instance",
-            "m3-ultramem-32",
+            "n2-standard-32",
             "--replicas",
-            1,
+            "0",
             "--cpu",
-            1000,
+            "2500",
             "--mem",
-            1024,
-            "--cost-class",
-            "preemptible",
+            "2024",
         ],
     )
     assert result.exit_code == 2
-    assert "No preemptible pricing for m3-ultramem-32 in us-central1." in result.output
+    assert "0 is not in the range x>=1" in result.output
+
+
+def test_region_without_pricing_data_is_not_offered():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "estimate",
+            *REQUIRED_ARGS,
+            "--instance",
+            "n2-standard-32",
+            "--region",
+            "us-central2",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "Invalid value for '--region'" in result.output
+
+
+def test_regions_are_read_from_instance_data():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "estimate",
+            *REQUIRED_ARGS,
+            "--instance",
+            "n2-standard-32",
+            "--region",
+            "europe-west10",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "in europe-west10" in result.output
+
+
+def test_missing_pricing_suggests_alternatives():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "estimate",
+            *REQUIRED_ARGS,
+            "--instance",
+            "n1-highcpu-16",
+            "--region",
+            "us-east5",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "No sud pricing for n1-highcpu-16 in us-east5." in result.output
+    assert "Cost classes available for n1-highcpu-16 in us-east5: cud-1y" in (
+        result.output
+    )
+    assert "Similar regions with sud pricing for n1-highcpu-16:" in result.output
+
+
+def test_shared_core_instance_type_is_rejected():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["estimate", *REQUIRED_ARGS, "--instance", "f1-micro"])
+    assert result.exit_code == 2
+    assert "f1-micro is a shared-core instance type" in result.output
+
+
+def test_zero_cpu_and_mem_is_rejected():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "estimate",
+            "--instance",
+            "n2-standard-32",
+            "--replicas",
+            "30",
+            "--cpu",
+            "0",
+            "--mem",
+            "0",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "--cpu and --mem can't both be 0" in result.output
 
 
 def test_memory_only_change():

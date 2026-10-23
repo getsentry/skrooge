@@ -1,65 +1,52 @@
 import difflib
+import functools
 import json
 import logging
 import math
+import re
 from importlib.resources import files
 
 logger = logging.getLogger(__name__)
 
 COST_CLASSES = ["sud", "ondemand", "preemptible", "cud-1y", "cud-3y"]
 
-REGIONS = [
-    "asia-east1",
-    "asia-east2",
-    "asia-northeast1",
-    "asia-northeast2",
-    "asia-northeast3",
-    "asia-south1",
-    "asia-south2",
-    "asia-southeast1",
-    "asia-southeast2",
-    "australia-southeast1",
-    "australia-southeast2",
-    "europe-central2",
-    "europe-north1",
-    "europe-southwest1",
-    "europe-west1",
-    "europe-west2",
-    "europe-west3",
-    "europe-west4",
-    "europe-west6",
-    "europe-west8",
-    "europe-west9",
-    "northamerica-northeast1",
-    "northamerica-northeast2",
-    "southamerica-east1",
-    "southamerica-west1",
-    "us-central1",
-    "us-central2",
-    "us-east1",
-    "us-east4",
-    "us-east5",
-    "us-south1",
-    "us-west1",
-    "us-west2",
-    "us-west3",
-    "us-west4",
-]
-
 MISSING_INSTANCE_TYPE_LINK = "https://github.com/getsentry/skrooge/issues/new?assignees=&labels=&projects=&template=BUG_REPORT.md"
 
 
-class InstanceNotFoundError(LookupError):
+class EstimateError(ValueError):
+    "The inputs can't be estimated; the message explains why to the user"
+
+
+class InstanceNotFoundError(EstimateError):
     pass
 
 
-class PricingNotFoundError(LookupError):
+class PricingNotFoundError(EstimateError):
     pass
 
 
+@functools.cache
 def load_instance_types():
     return json.loads(
         files("skrooge").joinpath("instances.json").read_text(encoding="utf-8")
+    )
+
+
+def available_regions():
+    # Skip aggregate pricing keys such as "us" or "asia-east"; GCP regions end in a digit
+    return sorted(
+        {
+            region
+            for family in load_instance_types().values()
+            for instance_data in family.values()
+            if instance_data
+            for region in instance_data.get("regions", {})
+            if region[-1].isdigit()
+        },
+        # Natural sort, so europe-west2 comes before europe-west10
+        key=lambda region: [
+            int(part) if part.isdigit() else part for part in re.split(r"(\d+)", region)
+        ],
     )
 
 
@@ -96,11 +83,38 @@ def find_instance_data(instance_types, instance):
     )
 
 
+def check_pricing(instance_data, instance, cost_class, region):
+    "Not every instance type has every cost class in every region"
+    prices = instance_data["regions"].get(region, {})
+    if cost_class in prices:
+        return
+    regions_with_pricing = [
+        r
+        for r, p in instance_data["regions"].items()
+        if cost_class in p and r[-1].isdigit()
+    ]
+    suggestions = []
+    if prices:
+        suggestions.append(
+            f"Cost classes available for {instance} in {region}: {', '.join(c for c in COST_CLASSES if c in prices)}"
+        )
+    close_matches = difflib.get_close_matches(region, regions_with_pricing)
+    if close_matches:
+        suggestions.append(
+            f"Similar regions with {cost_class} pricing for {instance}: {', '.join(close_matches)}"
+        )
+    raise PricingNotFoundError(
+        "\n".join(
+            [f"No {cost_class} pricing for {instance} in {region}.", *suggestions]
+        )
+    )
+
+
 def determine_constrained_resource(instance_data, cpu, mem):
     logger.info(
         f"Calculating constrained resource: {instance_data['specs']=}, {cpu=}, {mem=}"
     )
-    # A workload that only changes one resource is constrained by that resource
+    # A zero change in one resource means the other is the only constraint
     if cpu == 0:
         return "memory"
     if mem == 0:
@@ -150,10 +164,14 @@ def calculate_estimate(
     instance_types, instance, replicas, cpu, mem, cost_class, region
 ):
     instance_data = find_instance_data(instance_types, instance)
-    if hourly_price(instance_data, cost_class, region) is None:
-        raise PricingNotFoundError(
-            f"No {cost_class} pricing for {instance} in {region}."
+    if not all(
+        isinstance(instance_data["specs"][resource], (int, float))
+        for resource in ("cores", "memory")
+    ):
+        raise EstimateError(
+            f"{instance} is a shared-core instance type without a fixed number of cores, so skrooge can't estimate it."
         )
+    check_pricing(instance_data, instance, cost_class, region)
 
     delta_cpu = replicas * abs(cpu)
     delta_mem = replicas * abs(mem)

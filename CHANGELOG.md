@@ -11,17 +11,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `skrooge tui`, an interactive terminal UI that updates estimates live as you edit inputs, handles several workloads at once with a net total, and saves them to a JSON file
 
+## [1.1.0] - 2026-10-22
+
 ### Fixed
 
+- `estimate` no longer crashes with a traceback when:
+  - `--replicas`, `--cpu`, or `--mem` is missing (they're now required, and `--replicas` must be at least 1)
+  - the chosen region or cost class has no pricing for the instance type; the error lists the cost classes and similar regions that do
+  - `--cpu` or `--mem` is 0, or the instance type is a shared-core type (`f1-micro`, `g1-small`)
+- `--region` choices now come from the bundled pricing data, which removes `us-central2` (no pricing) and adds `africa-south1`, `europe-west10`, `europe-west12`, `me-central1`, `me-central2`, and `me-west1`
+- Treat negative `--cpu` and `--mem` values (for a scale-down) as the size of the change instead of producing negative results
 - `--verbosity` now also shows log output from the cost calculation functions
 - Correct the `--format` help text
-- A CPU or memory change of 0 no longer crashes with a division by zero
-- An instance type with no price for the chosen region and cost class gives an error instead of a traceback
 
 ### Changed
 
 - Require Python 3.11 or newer; Python 3.8, 3.9, and 3.10 are no longer supported
 - Build with `uv_build` and manage development with `uv`
+- Project links on PyPI now point to `getsentry/skrooge`
 
 ### Removed
 
@@ -51,7 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial commit.
 
-[unreleased]: https://github.com/getsentry/skrooge/compare/1.0.0...HEAD
+[unreleased]: https://github.com/getsentry/skrooge/compare/1.1.0...HEAD
+[1.1.0]: https://github.com/getsentry/skrooge/releases/tag/1.1.0
 [1.0.2]: https://github.com/getsentry/skrooge/compare/1.0.1...1.0.2
 [1.0.1]: https://github.com/getsentry/skrooge/compare/1.0.0...1.0.1
 [1.0.0]: https://github.com/getsentry/skrooge/compare/0.0.0...1.0.0

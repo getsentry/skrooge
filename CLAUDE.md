@@ -79,13 +79,15 @@ uv run --group scrape python skrooge/scraper.py > skrooge/instances.json
 
 The codebase follows a simple pattern of a calculation core with two front ends:
 
-- **`cli.py`**: Defines the Click CLI group, the `estimate` command, and the `tui` command (which imports `tui.py` lazily so `estimate` doesn't load Textual). Converts `InstanceNotFoundError`/`PricingNotFoundError` into `click.BadParameter`.
-- **`utils.py`**: Shared constants (`REGIONS`, `COST_CLASSES`) and the calculation pipeline:
-  - `load_instance_types()` / `find_instance_data()` — load `instances.json` and look up an instance type, raising `InstanceNotFoundError` with fuzzy-match suggestions (`difflib`)
+- **`cli.py`**: Defines the Click CLI group, the `estimate` command, and the `tui` command (which imports `tui.py` lazily so `estimate` doesn't load Textual). `estimate` checks its flags (required, `--replicas` at least 1, `--cpu` and `--mem` not both 0, `--region` choices from `available_regions()`), then converts any `EstimateError` from the pipeline into `click.BadParameter`.
+- **`utils.py`**: Shared constants (`COST_CLASSES`) and the calculation pipeline:
+  - `load_instance_types()` (cached) / `available_regions()` — load `instances.json` and list the GCP regions it has pricing for
+  - `find_instance_data()` — look up an instance type, raising `InstanceNotFoundError` with fuzzy-match suggestions (`difflib`)
+  - `check_pricing()` — raises `PricingNotFoundError`, suggesting cost classes and similar regions that have pricing. Not every instance type has every cost class in every region, so never index pricing without checking.
   - `determine_constrained_resource()` — determines if CPU or memory is the limiting factor
   - `determine_instance_count_required()` — calculates how many instances are needed
   - `calculate_cost()` — computes hourly/monthly/yearly costs
-  - `calculate_estimate()` — runs the whole pipeline and returns the result dict that `render` and the TUI consume
+  - `calculate_estimate()` — runs the whole pipeline (rejecting shared-core instance types) and returns the result dict that `render` and the TUI consume. Every user-facing problem it finds is an `EstimateError`.
 - **`render.py`**: Output dispatching for `english` (human-readable) and `json` formats.
 - **`tui.py`**: `SkroogeApp`, a Textual app with an input form, an estimate panel (every cost class for the selected workload), and a workloads table with a net total. `Workload` keeps numeric fields as the text typed, and `estimate_workload()` validates them before calling `calculate_estimate()`. In the TUI a negative change to the constrained resource counts as a saving; the CLI reports magnitudes only.
 
@@ -111,6 +113,8 @@ GitHub Actions workflows target `main` branch:
 - **`publish.yml`**: Triggered by pushes to `release/**` branches. Runs tests, then builds with `uv build` and uploads `dist/*` as a workflow artifact named after the commit SHA, which Craft publishes to PyPI.
 - **`release.yml`**: Manual workflow dispatch using Sentry's Craft for version bumping (via `scripts/bump-version.sh`, which needs uv), changelog generation, and GitHub releases.
 - **`changelog-preview.yml`**: Previews changelog entries on PRs.
+
+The step-by-step release process (changelog, running the Release workflow with an explicit version, approving in getsentry/publish) is documented in the "Releasing" section of `README.md`. Craft doesn't edit `CHANGELOG.md` here (no changelog policy is configured), and `.craft.yml`'s `minVersion: 1.8.1` means the Release workflow needs an explicit version, not `auto` or a bump keyword.
 
 ## Code Conventions
 
