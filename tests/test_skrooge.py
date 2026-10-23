@@ -1,11 +1,56 @@
 import json
 
+import pytest
 from click.testing import CliRunner
 
-from skrooge import tui
+from skrooge import cli as cli_module
+from skrooge import tui, utils
 from skrooge.cli import cli
 
 REQUIRED_ARGS = ["--replicas", "30", "--cpu", "2500", "--mem", "2024"]
+
+# A fixed copy of part of instances.json, so tests that check prices don't break when the
+# bundled data is updated
+INSTANCE_DATA = {
+    "n2": {
+        "n2-standard-32": {
+            "regions": {
+                "us": {"ondemand": 1.55389},
+                "us-central1": {
+                    "ondemand": 1.55389,
+                    "sud": 1.24311,
+                    "preemptible": 0.40192,
+                    "cud-1y": 0.97891,
+                    "cud-3y": 0.6993,
+                },
+                "europe-west10": {"ondemand": 1.8},
+                "europe-west2": {"ondemand": 1.8},
+            },
+            "specs": {"cores": 32, "memory": 128},
+        },
+    },
+    "n1": {
+        "n1-highcpu-16": {
+            "regions": {
+                "us-central1": {"ondemand": 0.5672, "sud": 0.39704},
+                "us-east4": {"ondemand": 0.5672, "sud": 0.39704},
+                "us-east5": {"cud-1y": 0.35707, "cud-3y": 0.25506},
+            },
+            "specs": {"cores": 16, "memory": 14.4},
+        },
+    },
+    "resource_prices": {
+        "n2": {"me-central1": {"ondemand": {"cores": 0.03, "memory": 0.004}}},
+    },
+}
+
+
+@pytest.fixture
+def instance_data(monkeypatch):
+    # Each module that loads instances.json imports load_instance_types by name
+    for module in (cli_module, tui, utils):
+        monkeypatch.setattr(module, "load_instance_types", lambda: INSTANCE_DATA)
+    return INSTANCE_DATA
 
 
 def test_version():
@@ -38,7 +83,7 @@ def test_invalid_instance_type_provides_github_bug_report_link():
     )
 
 
-def test_treat_negative_cpu_and_mem_values_as_absolute():
+def test_treat_negative_cpu_and_mem_values_as_absolute(instance_data):
     runner = CliRunner()
     result = runner.invoke(
         cli,
@@ -66,7 +111,7 @@ def test_treat_negative_cpu_and_mem_values_as_absolute():
     assert "$32669/y" in result.output
 
 
-def test_verbosity_includes_calculation_logs():
+def test_verbosity_includes_calculation_logs(instance_data):
     runner = CliRunner()
     result = runner.invoke(
         cli,
@@ -136,24 +181,22 @@ def test_region_without_pricing_data_is_not_offered():
     assert "Invalid value for '--region'" in result.output
 
 
-def test_regions_are_read_from_instance_data():
-    runner = CliRunner()
-    result = runner.invoke(
-        cli,
-        [
-            "estimate",
-            *REQUIRED_ARGS,
-            "--instance",
-            "n2-standard-32",
-            "--region",
-            "europe-west10",
-        ],
-    )
-    assert result.exit_code == 0
-    assert "in europe-west10" in result.output
+def test_regions_are_read_from_instance_data(instance_data):
+    # Skips aggregate regions like "us" and the resource_prices key, in natural order
+    assert cli_module.available_regions() == [
+        "europe-west2",
+        "europe-west10",
+        "us-central1",
+        "us-east4",
+        "us-east5",
+    ]
 
 
-def test_missing_pricing_suggests_alternatives():
+def test_bundled_data_offers_the_default_region():
+    assert "us-central1" in cli_module.available_regions()
+
+
+def test_missing_pricing_suggests_alternatives(instance_data):
     runner = CliRunner()
     result = runner.invoke(
         cli,

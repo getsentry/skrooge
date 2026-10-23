@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `skrooge tui`, an interactive terminal UI that updates estimates live as you edit inputs, handles several workloads at once with a net total, and saves them to a JSON file
 - Bin-packed estimates, which charge a workload for just the CPU and memory it requests at per-vCPU and per-GiB prices, for large shared clusters. `estimate` prints one alongside the whole-node estimate (and adds `packing_efficiency`, `resource_prices`, and `resource_costs` to `--format json`), and the TUI can switch between the two
 - `--packing-efficiency` (`-p`), and a matching TUI setting, to account for how full a cluster's nodes are in bin-packed estimates
+- `c4d`, `n4d` and `n4a` machine types, once `instances.json` is next regenerated
+
+### Changed
+
+- The price scraper now reads prices from GCP's Cloud Billing Catalog API, as the pricing calculator price list it used is gone. A daily workflow opens a pull request when prices change, with a report of what changed.
 
 ## [1.1.0] - 2026-10-22
 

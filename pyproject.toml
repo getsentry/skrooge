@@ -42,17 +42,9 @@ dev = [
     "pytest-cov>=7.0",
     "ruff>=0.17",
 ]
-scrape = [
-    "lxml",
-    "pandas",
-    "requests",
-]
 
 [tool.uv.build-backend]
 module-root = ""
-
-[tool.ruff]
-extend-exclude = ["skrooge/scraper.py"]
 
 [tool.ruff.lint]
 extend-select = ["B", "C4", "I", "UP"]
@@ -65,4 +57,3 @@ filterwarnings = ["error"]
 
 [tool.coverage.run]
 source = ["skrooge"]
-omit = ["skrooge/scraper.py"]
