@@ -175,6 +175,65 @@ def test_region_without_pricing_data_is_not_offered():
     assert "Invalid value for '--region'" in result.output
 
 
+@pytest.mark.parametrize("region", ["us-cnetral1", "US-CNETRAL1"])
+def test_invalid_region_suggests_similar_regions(region):
+    # The --region choices come from the bundled data, which always has us-central1
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "estimate",
+            *REQUIRED_ARGS,
+            "--instance",
+            "n2-standard-32",
+            "--region",
+            region,
+        ],
+    )
+    assert result.exit_code == 2
+    assert f"'{region}' isn't a region skrooge has pricing for." in result.output
+    assert "Did you mean: us-central1" in result.output
+    assert "List them with: skrooge regions" in result.output
+    # Instead of Click's error, which lists every region
+    assert "is not one of" not in result.output
+
+
+def test_invalid_region_without_similar_regions():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "estimate",
+            *REQUIRED_ARGS,
+            "--instance",
+            "n2-standard-32",
+            "--region",
+            "mars",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "'mars' isn't a region skrooge has pricing for." in result.output
+    assert "Did you mean" not in result.output
+    assert "List them with: skrooge regions" in result.output
+
+
+def test_region_is_case_insensitive(instance_data):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "estimate",
+            *REQUIRED_ARGS,
+            "--instance",
+            "n2-standard-32",
+            "--region",
+            "US-CENTRAL1",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "in us-central1" in result.output
+
+
 def test_regions_are_read_from_instance_data(instance_data):
     # Skips aggregate regions like "us" and the resource_prices key, in natural order
     assert cli_module.available_regions() == [
