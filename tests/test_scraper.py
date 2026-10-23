@@ -588,14 +588,24 @@ def test_diff_limits_flagged_prices_per_cost_class():
             "regions": {"us-central1": {"ondemand": 1 + size, "preemptible": 2.0}}
         }
     report = scraper.diff(old, new, max_flagged=2)
-    assert "### ⚠️ 8 prices changed by more than 20%" in report
+    # Spot price changes are listed, but not flagged
+    assert "### ⚠️ 4 prices changed by more than 20%" in report
     assert "#### `ondemand`: 4" in report
-    assert "#### `preemptible`: 4" in report
+    assert "| n2 | preemptible | 4 | 4 | +100.0% | +100.0% | +100.0% | 4 |" in report
+    assert "<summary>4 Spot (<code>preemptible</code>) prices changed" in report
     # The biggest changes first
-    ondemand = report.split("#### `ondemand`")[1].split("####")[0]
+    ondemand = report.split("#### `ondemand`")[1].split("<details>")[0]
     assert "n2-standard-4" in ondemand and "n2-standard-3" in ondemand
     assert "n2-standard-2" not in ondemand
     assert report.count("…and 2 more.") == 2
+
+
+def test_diff_with_only_spot_changes():
+    old = {"n2": {"n2-standard-2": {"regions": {"us-central1": {"preemptible": 1.0}}}}}
+    new = {"n2": {"n2-standard-2": {"regions": {"us-central1": {"preemptible": 2.0}}}}}
+    report = scraper.diff(old, new)
+    assert "⚠️" not in report
+    assert "<details>" in report
 
 
 def test_diff_without_changes():

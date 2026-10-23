@@ -654,10 +654,11 @@ def diff(old, new, threshold=0.2, max_flagged=20):
             compared = True
             changed = sum(1 for r in ratios if abs(r) > 1e-9)
             over = sum(1 for r in ratios if abs(r) > threshold)
+            marker = "⚠️ " if over and cost_class != "preemptible" else ""
             lines.append(
                 f"| {family} | {cost_class} | {len(ratios)} | {changed} "
                 f"| {statistics.median(ratios):+.1%} | {min(ratios):+.1%} "
-                f"| {max(ratios):+.1%} | {'⚠️ ' if over else ''}{over} |"
+                f"| {max(ratios):+.1%} | {marker}{over} |"
             )
         if not compared:
             lines.append(f"| {family} | | 0 | | | | | |")
@@ -666,7 +667,8 @@ def diff(old, new, threshold=0.2, max_flagged=20):
             flagged.setdefault(key[3], []).append((key, old_price, new_price, change))
     lines.append("")
 
-    total = sum(len(items) for items in flagged.values())
+    # Spot prices change often, so their changes are listed but not flagged
+    total = sum(len(items) for c, items in flagged.items() if c != "preemptible")
     if total:
         lines += [
             f"### ⚠️ {total} prices changed by more than {threshold:.0%}",
@@ -680,9 +682,7 @@ def diff(old, new, threshold=0.2, max_flagged=20):
         items = sorted(flagged.get(cost_class, []), key=lambda item: -abs(item[3]))
         if not items:
             continue
-        lines += [
-            "",
-            f"#### `{cost_class}`: {len(items)}",
+        rows = [
             "",
             "| Machine type | Region | Old | New | Change |",
             "| --- | --- | ---: | ---: | ---: |",
@@ -690,13 +690,28 @@ def diff(old, new, threshold=0.2, max_flagged=20):
         for (_, machine_type, region, _), old_price, new_price, change in items[
             :max_flagged
         ]:
-            lines.append(
+            rows.append(
                 f"| {machine_type} | {region} | {old_price} | {new_price} "
                 f"| {change:+.1%} |"
             )
         if len(items) > max_flagged:
-            lines.append(f"\n…and {len(items) - max_flagged} more.")
-    if total:
+            rows.append(f"\n…and {len(items) - max_flagged} more.")
+        if cost_class == "preemptible":
+            lines += [
+                "",
+                "<details>",
+                (
+                    f"<summary>{len(items)} Spot (<code>preemptible</code>) prices "
+                    f"changed by more than {threshold:.0%}. Spot prices change often, "
+                    "so these aren't flagged.</summary>"
+                ),
+                *rows,
+                "",
+                "</details>",
+            ]
+        else:
+            lines += ["", f"#### `{cost_class}`: {len(items)}", *rows]
+    if flagged:
         lines.append("")
     return "\n".join(lines)
 
