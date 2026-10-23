@@ -241,7 +241,7 @@ def estimate(replicas, cpu, mem, instance, cost_class, region, format):
     type=click.Choice(COST_CLASSES, case_sensitive=False),
 )
 def regions(instance, cost_class):
-    "List the regions skrooge has pricing for"
+    "List the regions skrooge has prices for"
     instance_data = find_instance_type(instance) if instance else None
     matching_regions = available_regions(cost_class, instance_data)
     if not matching_regions:
