@@ -70,7 +70,7 @@ No cluster packs perfectly, so `--packing-efficiency` (`-p`) sets the percentage
     ...
     Bin-packed in a cluster at 80% efficiency, this workload will cost $224.83/h (or $164126/m (or $1969511/y)): $134072/m for cores and $30054/m for memory.
 
-Bin-packed estimates need per-vCPU and per-GiB prices, which skrooge works out from the prices of each family's machine types. That isn't possible for families whose machine types all have the same memory per vCPU (`c2`, `t2a`, `t2d`) or include GPUs (`a2`, `g2`), so those only get whole-node estimates.
+Bin-packed estimates use GCP's per-vCPU and per-GiB prices for each machine family. GPU machine types (`a2`, `g2`) also pay for their GPUs, and shared-core types (`f1-micro`, `g1-small`, `e2-micro`, `e2-small`, `e2-medium`) for a fraction of a vCPU, so those only get whole-node estimates.
 
 ### Interactive mode
 
