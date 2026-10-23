@@ -33,6 +33,24 @@ def nice(number: float):
     return round(number, 5)
 
 
+def keep_resource_prices(output, family, cpu_prices, ram_prices, cost_classes):
+    """Record a family's hourly price per vCPU and per GiB of memory in each region
+
+    Most machine types are priced as vCPUs plus memory, so these let estimates charge for
+    just the resources a workload uses. cost_classes maps each cost class to the multiplier
+    applied to these prices for it, e.g. the sustained use discount. A price of 0 means the
+    family isn't offered in that region.
+    """
+    for region, cpu_price in cpu_prices.items():
+        ram_price = ram_prices.get(region)
+        if cpu_price and ram_price:
+            for cost_class, multiplier in cost_classes.items():
+                output['resource_prices'].setdefault(family, {}).setdefault(region, {})[cost_class] = {
+                    'cores': round(multiplier * cpu_price, 8),
+                    'memory': round(multiplier * ram_price, 8),
+                }
+
+
 def html_table_to_dict(html_url: str):
     tables = pd.read_html(html_url)
     df = pd.concat(tables)
@@ -404,6 +422,7 @@ if __name__ == '__main__':
 
     # OS License
     output['license'] = {}
+    output['resource_prices'] = {}
 
     # Download GCP Calculator pricing, and reformat it to GCPinstances.info strcture
     data_json = requests.get('https://cloudpricingcalculator.appspot.com/static/data/pricelist.json').json()
@@ -1111,6 +1130,7 @@ if __name__ == '__main__':
     # On Demand, SUD and specs
     c2d_ram = data['CP-COMPUTEENGINE-C2D-PREDEFINED-VM-RAM']
     c2d_cpu = data['CP-COMPUTEENGINE-C2D-PREDEFINED-VM-CORE']
+    keep_resource_prices(output, 'c2d', c2d_cpu, c2d_ram, {'ondemand': 1, 'sud': c2d_sud_discount})
     for k, v in c2d_instance_types.items():
         output['c2d'][k]['specs'].update({'cores': v['cpu'], 'memory': v['memory'], 'local_ssd': v['local_ssd'],
                                           'network_egress': v['network_egress'], 'benchmark': v['benchmark'],
@@ -1128,6 +1148,7 @@ if __name__ == '__main__':
     # Preemptible
     c2d_ram = data['CP-COMPUTEENGINE-C2D-PREDEFINED-VM-RAM-PREEMPTIBLE']
     c2d_cpu = data['CP-COMPUTEENGINE-C2D-PREDEFINED-VM-CORE-PREEMPTIBLE']
+    keep_resource_prices(output, 'c2d', c2d_cpu, c2d_ram, {'preemptible': 1})
     for k, v in c2d_instance_types.items():
         for reg, c2d_cpu_region_cost in c2d_cpu.items():
             for reg2, c2d_ram_region_cost in c2d_ram.items():
@@ -1137,6 +1158,7 @@ if __name__ == '__main__':
     # CUD - 1 year
     c2d_ram = data['CP-COMPUTEENGINE-C2D-CUD-1-YEAR-RAM']
     c2d_cpu = data['CP-COMPUTEENGINE-C2D-CUD-1-YEAR-CPU']
+    keep_resource_prices(output, 'c2d', c2d_cpu, c2d_ram, {'cud-1y': 1})
     for k, v in c2d_instance_types.items():
         for reg, c2d_cpu_region_cost in c2d_cpu.items():
             for reg2, c2d_ram_region_cost in c2d_ram.items():
@@ -1146,6 +1168,7 @@ if __name__ == '__main__':
     # CUD - 3 year
     c2d_ram = data['CP-COMPUTEENGINE-C2D-CUD-3-YEAR-RAM']
     c2d_cpu = data['CP-COMPUTEENGINE-C2D-CUD-3-YEAR-CPU']
+    keep_resource_prices(output, 'c2d', c2d_cpu, c2d_ram, {'cud-3y': 1})
     for k, v in c2d_instance_types.items():
         for reg, c2d_cpu_region_cost in c2d_cpu.items():
             for reg2, c2d_ram_region_cost in c2d_ram.items():
@@ -1157,6 +1180,7 @@ if __name__ == '__main__':
     # On Demand, SUD and specs
     c2_ram = data['CP-COMPUTEENGINE-C2-PREDEFINED-VM-RAM']
     c2_cpu = data['CP-COMPUTEENGINE-C2-PREDEFINED-VM-CORE']
+    keep_resource_prices(output, 'c2', c2_cpu, c2_ram, {'ondemand': 1, 'sud': c2_sud_discount})
     for k, v in c2_instance_types.items():
         output['c2'][k]['specs'].update({'cores': v['cpu'], 'memory': v['memory'], 'local_ssd': v['local_ssd'],
                                          'network_egress': v['network_egress'], 'benchmark': v['benchmark'],
@@ -1174,6 +1198,7 @@ if __name__ == '__main__':
     # Preemptible
     c2_ram = data['CP-COMPUTEENGINE-C2-PREDEFINED-VM-RAM-PREEMPTIBLE']
     c2_cpu = data['CP-COMPUTEENGINE-C2-PREDEFINED-VM-CORE-PREEMPTIBLE']
+    keep_resource_prices(output, 'c2', c2_cpu, c2_ram, {'preemptible': 1})
     for k, v in c2_instance_types.items():
         for reg, c2_cpu_region_cost in c2_cpu.items():
             for reg2, c2_ram_region_cost in c2_ram.items():
@@ -1183,6 +1208,7 @@ if __name__ == '__main__':
     # CUD - 1 year
     c2_ram = data['CP-COMPUTEENGINE-C2-CUD-1-YEAR-RAM']
     c2_cpu = data['CP-COMPUTEENGINE-C2-CUD-1-YEAR-CPU']
+    keep_resource_prices(output, 'c2', c2_cpu, c2_ram, {'cud-1y': 1})
     for k, v in c2_instance_types.items():
         for reg, c2_cpu_region_cost in c2_cpu.items():
             for reg2, c2_ram_region_cost in c2_ram.items():
@@ -1192,6 +1218,7 @@ if __name__ == '__main__':
     # CUD - 3 year
     c2_ram = data['CP-COMPUTEENGINE-C2-CUD-3-YEAR-RAM']
     c2_cpu = data['CP-COMPUTEENGINE-C2-CUD-3-YEAR-CPU']
+    keep_resource_prices(output, 'c2', c2_cpu, c2_ram, {'cud-3y': 1})
     for k, v in c2_instance_types.items():
         for reg, c2_cpu_region_cost in c2_cpu.items():
             for reg2, c2_ram_region_cost in c2_ram.items():
@@ -1204,6 +1231,7 @@ if __name__ == '__main__':
     # On Demand, SUD and specs
     c3_ram = data['CP-COMPUTEENGINE-C3-PREDEFINED-VM-RAM']
     c3_cpu = data['CP-COMPUTEENGINE-C3-PREDEFINED-VM-CORE']
+    keep_resource_prices(output, 'c3', c3_cpu, c3_ram, {'ondemand': 1, 'sud': c3_sud_discount})
     for k, v in c3_instance_types.items():
         output['c3'][k]['specs'].update({'cores': v['cpu'], 'memory': v['memory'], 'local_ssd': v['local_ssd'],
                                          'network_egress': v['network_egress'], 'benchmark': v['benchmark'],
@@ -1221,6 +1249,7 @@ if __name__ == '__main__':
     # Preemptible
     c3_ram = data['CP-COMPUTEENGINE-C3-PREDEFINED-VM-RAM-PREEMPTIBLE']
     c3_cpu = data['CP-COMPUTEENGINE-C3-PREDEFINED-VM-CORE-PREEMPTIBLE']
+    keep_resource_prices(output, 'c3', c3_cpu, c3_ram, {'preemptible': 1})
     for k, v in c3_instance_types.items():
         for reg, c3_cpu_region_cost in c3_cpu.items():
             for reg2, c3_ram_region_cost in c3_ram.items():
@@ -1230,6 +1259,7 @@ if __name__ == '__main__':
     # CUD - 1 year
     c3_ram = data['CP-COMPUTEENGINE-C3-CUD-1-YEAR-RAM']
     c3_cpu = data['CP-COMPUTEENGINE-C3-CUD-1-YEAR-CPU']
+    keep_resource_prices(output, 'c3', c3_cpu, c3_ram, {'cud-1y': 1})
     for k, v in c3_instance_types.items():
         for reg, c3_cpu_region_cost in c3_cpu.items():
             for reg2, c3_ram_region_cost in c3_ram.items():
@@ -1239,6 +1269,7 @@ if __name__ == '__main__':
     # CUD - 3 year
     c3_ram = data['CP-COMPUTEENGINE-C3-CUD-3-YEAR-RAM']
     c3_cpu = data['CP-COMPUTEENGINE-C3-CUD-3-YEAR-CPU']
+    keep_resource_prices(output, 'c3', c3_cpu, c3_ram, {'cud-3y': 1})
     for k, v in c3_instance_types.items():
         for reg, c3_cpu_region_cost in c3_cpu.items():
             for reg2, c3_ram_region_cost in c3_ram.items():
@@ -1250,6 +1281,7 @@ if __name__ == '__main__':
     # On Demand, SUD and specs
     c3d_ram = data['CP-COMPUTEENGINE-C3-PREDEFINED-VM-RAM']
     c3d_cpu = data['CP-COMPUTEENGINE-C3D-PREDEFINED-VM-CORE']
+    keep_resource_prices(output, 'c3d', c3d_cpu, c3d_ram, {'ondemand': 1, 'sud': c3d_sud_discount})
     for k, v in c3d_instance_types.items():
         output['c3d'][k]['specs'].update({'cores': v['cpu'], 'memory': v['memory'], 'local_ssd': v['local_ssd'],
                                          'network_egress': v['network_egress'], 'benchmark': v['benchmark'],
@@ -1267,6 +1299,7 @@ if __name__ == '__main__':
     # Preemptible
     c3d_ram = data['CP-COMPUTEENGINE-C3D-PREDEFINED-VM-RAM-PREEMPTIBLE']
     c3d_cpu = data['CP-COMPUTEENGINE-C3D-PREDEFINED-VM-CORE-PREEMPTIBLE']
+    keep_resource_prices(output, 'c3d', c3d_cpu, c3d_ram, {'preemptible': 1})
     for k, v in c3d_instance_types.items():
         for reg, c3d_cpu_region_cost in c3d_cpu.items():
             for reg2, c3d_ram_region_cost in c3d_ram.items():
@@ -1276,6 +1309,7 @@ if __name__ == '__main__':
     # CUD - 1 year
     c3d_ram = {'us-central1': 0.002494, 'europe-west4': 0.002746, 'us-east4': 0.002494, 'us-east1': 0.002494, 'europe-west1': 0.002746, 'asia-southeast1': 0.003077, 'us-east5': 0, 'us-west4': 0, 'us-west1': 0, 'us-west2': 0, 'us-west3': 0, 'us-south1': 0, 'europe-central2': 0, 'europe-west2': 0, 'europe-west3': 0, 'europe-west6': 0, 'europe-west8': 0, 'europe-west9': 0, 'europe-west10': 0, 'europe-west12': 0, 'europe-north1': 0, 'europe-southwest1': 0, 'northamerica-northeast1': 0, 'northamerica-northeast2': 0, 'africa-south1': 0, 'asia': 0, 'asia-east': 0, 'asia-east1': 0, 'asia-east2': 0, 'asia-northeast': 0, 'me-west1': 0, 'me-central1': 0, 'me-central2': 0, 'asia-northeast1': 0, 'asia-northeast2': 0, 'asia-northeast3': 0, 'asia-southeast': 0, 'australia-southeast1': 0, 'australia-southeast2': 0, 'australia': 0, 'southamerica-east1': 0, 'asia-south1': 0, 'asia-southeast2': 0, 'asia-south2': 0, 'southamerica-west1': 0}
     c3d_cpu = {'us-central1': 0.018624, 'europe-west4': 0.020507, 'us-east4': 0.018624, 'us-east1': 0.018624, 'europe-west1': 0.020507, 'asia-southeast1': 0.022977, 'us-east5': 0, 'us-west4': 0, 'us-west1': 0, 'us-west2': 0, 'us-west3': 0, 'us-south1': 0, 'europe-central2': 0, 'europe-west2': 0, 'europe-west3': 0, 'europe-west6': 0, 'europe-west8': 0, 'europe-west9': 0, 'europe-west10': 0, 'europe-west12': 0, 'europe-north1': 0, 'europe-southwest1': 0, 'northamerica-northeast1': 0, 'northamerica-northeast2': 0, 'africa-south1': 0, 'asia': 0, 'asia-east': 0, 'asia-east1': 0, 'asia-east2': 0, 'asia-northeast': 0, 'me-west1': 0, 'me-central1': 0, 'me-central2': 0, 'asia-northeast1': 0, 'asia-northeast2': 0, 'asia-northeast3': 0, 'asia-southeast': 0, 'australia-southeast1': 0, 'australia-southeast2': 0, 'australia': 0, 'southamerica-east1': 0, 'asia-south1': 0, 'asia-southeast2': 0, 'asia-south2': 0, 'southamerica-west1': 0}
+    keep_resource_prices(output, 'c3d', c3d_cpu, c3d_ram, {'cud-1y': 1})
     for k, v in c3d_instance_types.items():
         for reg, c3d_cpu_region_cost in c3d_cpu.items():
             for reg2, c3d_ram_region_cost in c3d_ram.items():
@@ -1285,6 +1319,7 @@ if __name__ == '__main__':
     # CUD - 3 year
     c3d_ram = data['CP-COMPUTEENGINE-C3D-CUD-3-YEAR-RAM']
     c3d_cpu = data['CP-COMPUTEENGINE-C3D-CUD-3-YEAR-CPU']
+    keep_resource_prices(output, 'c3d', c3d_cpu, c3d_ram, {'cud-3y': 1})
     for k, v in c3d_instance_types.items():
         for reg, c3d_cpu_region_cost in c3d_cpu.items():
             for reg2, c3d_ram_region_cost in c3d_ram.items():
@@ -1296,6 +1331,7 @@ if __name__ == '__main__':
     # On Demand, SUD and specs
     a2_ram = data['CP-COMPUTEENGINE-A2-PREDEFINED-VM-RAM']
     a2_cpu = data['CP-COMPUTEENGINE-A2-PREDEFINED-VM-CORE']
+    keep_resource_prices(output, 'a2', a2_cpu, a2_ram, {'ondemand': 1, 'sud': a2_sud_discount})
     for k, v in a2_instance_types.items():
         if 'highgpu' in k or 'megagpu' in k:
             a2_gpu = 'GPU_NVIDIA_TESLA_A100'
@@ -1314,6 +1350,7 @@ if __name__ == '__main__':
     # Preemptible
     a2_ram = data['CP-COMPUTEENGINE-A2-PREDEFINED-VM-RAM-PREEMPTIBLE']
     a2_cpu = data['CP-COMPUTEENGINE-A2-PREDEFINED-VM-CORE-PREEMPTIBLE']
+    keep_resource_prices(output, 'a2', a2_cpu, a2_ram, {'preemptible': 1})
     for k, v in a2_instance_types.items():
         if 'highgpu' in k or 'megagpu' in k:
             a2_gpu = 'GPU_NVIDIA_TESLA_A100'
@@ -1326,6 +1363,7 @@ if __name__ == '__main__':
     # CUD - 1 year
     a2_ram = data['CP-COMPUTEENGINE-A2-CUD-1-YEAR-RAM']
     a2_cpu = data['CP-COMPUTEENGINE-A2-CUD-1-YEAR-CPU']
+    keep_resource_prices(output, 'a2', a2_cpu, a2_ram, {'cud-1y': 1})
     for k, v in a2_instance_types.items():
         if 'highgpu' in k or 'megagpu' in k:
             a2_gpu = 'GPU_NVIDIA_TESLA_A100'
@@ -1338,6 +1376,7 @@ if __name__ == '__main__':
     # CUD - 3 year
     a2_ram = data['CP-COMPUTEENGINE-A2-CUD-3-YEAR-RAM']
     a2_cpu = data['CP-COMPUTEENGINE-A2-CUD-3-YEAR-CPU']
+    keep_resource_prices(output, 'a2', a2_cpu, a2_ram, {'cud-3y': 1})
     for k, v in a2_instance_types.items():
         if 'highgpu' in k or 'megagpu' in k:
             a2_gpu = 'GPU_NVIDIA_TESLA_A100'
@@ -1352,6 +1391,7 @@ if __name__ == '__main__':
     # On Demand and SUD
     m1_ram = data['CP-COMPUTEENGINE-M1-PREDEFINED-VM-RAM']
     m1_cpu = data['CP-COMPUTEENGINE-M1-PREDEFINED-VM-CORE']
+    keep_resource_prices(output, 'm1', m1_cpu, m1_ram, {'ondemand': 1, 'sud': m1_sud_discount})
     for k, v in m1_instance_types.items():
         if 'ultramem' in k:
             output['m1'][k]['specs'].update({'cores': v['cpu'], 'memory': v['memory'], 'local_ssd': v['local_ssd'],
@@ -1374,6 +1414,7 @@ if __name__ == '__main__':
     # Preemptible
     m1_ram = data['CP-COMPUTEENGINE-M1-PREDEFINED-VM-RAM-PREEMPTIBLE']
     m1_cpu = data['CP-COMPUTEENGINE-M1-PREDEFINED-VM-CORE-PREEMPTIBLE']
+    keep_resource_prices(output, 'm1', m1_cpu, m1_ram, {'preemptible': 1})
     for k, v in m1_instance_types.items():
         for reg, m1_cpu_region_cost in m1_cpu.items():
             for reg2, m1_ram_region_cost in m1_ram.items():
@@ -1383,6 +1424,7 @@ if __name__ == '__main__':
     # CUD - 1 year
     m1_ram = data['CP-COMPUTEENGINE-M1-CUD-1-YEAR-RAM']
     m1_cpu = data['CP-COMPUTEENGINE-M1-CUD-1-YEAR-CPU']
+    keep_resource_prices(output, 'm1', m1_cpu, m1_ram, {'cud-1y': 1})
     for k, v in m1_instance_types.items():
         for reg, m1_cpu_region_cost in m1_cpu.items():
             for reg2, m1_ram_region_cost in m1_ram.items():
@@ -1392,6 +1434,7 @@ if __name__ == '__main__':
     # CUD - 3 year
     m1_ram = data['CP-COMPUTEENGINE-M1-CUD-3-YEAR-RAM']
     m1_cpu = data['CP-COMPUTEENGINE-M1-CUD-3-YEAR-CPU']
+    keep_resource_prices(output, 'm1', m1_cpu, m1_ram, {'cud-3y': 1})
     for k, v in m1_instance_types.items():
         for reg, m1_cpu_region_cost in m1_cpu.items():
             for reg2, m1_ram_region_cost in m1_ram.items():
@@ -1403,6 +1446,7 @@ if __name__ == '__main__':
     # On Demand and SUD
     m2_ram = data['CP-COMPUTEENGINE-M2-PREDEFINED-VM-RAM']
     m2_cpu = data['CP-COMPUTEENGINE-M2-PREDEFINED-VM-CORE']
+    keep_resource_prices(output, 'm2', m2_cpu, m2_ram, {'ondemand': 1, 'sud': m2_sud_discount})
     for k, v in m2_instance_types.items():
         output['m2'][k]['specs'].update({'cores': v['cpu'], 'memory': v['memory'], 'local_ssd': v['local_ssd'],
                                          'network_egress': v['network_egress'], 'benchmark': v['benchmark'],
@@ -1419,6 +1463,7 @@ if __name__ == '__main__':
     # CUD - 1 year
     m2_ram = data['CP-COMPUTEENGINE-M2-CUD-1-YEAR-RAM']
     m2_cpu = data['CP-COMPUTEENGINE-M2-CUD-1-YEAR-CPU']
+    keep_resource_prices(output, 'm2', m2_cpu, m2_ram, {'cud-1y': 1})
     for k, v in m2_instance_types.items():
         for reg, m2_cpu_region_cost in m2_cpu.items():
             for reg2, m2_ram_region_cost in m2_ram.items():
@@ -1428,6 +1473,7 @@ if __name__ == '__main__':
     # CUD - 3 year
     m2_ram = data['CP-COMPUTEENGINE-M2-CUD-3-YEAR-RAM']
     m2_cpu = data['CP-COMPUTEENGINE-M2-CUD-3-YEAR-CPU']
+    keep_resource_prices(output, 'm2', m2_cpu, m2_ram, {'cud-3y': 1})
     for k, v in m2_instance_types.items():
         for reg, m2_cpu_region_cost in m2_cpu.items():
             for reg2, m2_ram_region_cost in m2_ram.items():
@@ -1439,6 +1485,7 @@ if __name__ == '__main__':
     # On Demand and SUD
     m3_ram = data['CP-COMPUTEENGINE-M3-PREDEFINED-VM-RAM']
     m3_cpu = data['CP-COMPUTEENGINE-M3-PREDEFINED-VM-CORE']
+    keep_resource_prices(output, 'm3', m3_cpu, m3_ram, {'ondemand': 1, 'sud': m3_sud_discount})
     for k, v in m3_instance_types.items():
         output['m3'][k]['specs'].update({'cores': v['cpu'], 'memory': v['memory'], 'local_ssd': v['local_ssd'],
                                          'network_egress': v['network_egress'], 'benchmark': v['benchmark'],
@@ -1455,6 +1502,7 @@ if __name__ == '__main__':
     # CUD - 1 year
     m3_ram = data['CP-COMPUTEENGINE-M3-CUD-1-YEAR-RAM']
     m3_cpu = data['CP-COMPUTEENGINE-M3-CUD-1-YEAR-CPU']
+    keep_resource_prices(output, 'm3', m3_cpu, m3_ram, {'cud-1y': 1})
     for k, v in m3_instance_types.items():
         for reg, m3_cpu_region_cost in m3_cpu.items():
             for reg2, m3_ram_region_cost in m3_ram.items():
@@ -1464,6 +1512,7 @@ if __name__ == '__main__':
     # CUD - 3 year
     m3_ram = data['CP-COMPUTEENGINE-M3-CUD-3-YEAR-RAM']
     m3_cpu = data['CP-COMPUTEENGINE-M3-CUD-3-YEAR-CPU']
+    keep_resource_prices(output, 'm3', m3_cpu, m3_ram, {'cud-3y': 1})
     for k, v in m3_instance_types.items():
         for reg, m3_cpu_region_cost in m3_cpu.items():
             for reg2, m3_ram_region_cost in m3_ram.items():
@@ -1475,6 +1524,7 @@ if __name__ == '__main__':
     # On Demand and SUD
     n2_ram = data['CP-COMPUTEENGINE-N2-PREDEFINED-VM-RAM']
     n2_cpu = data['CP-COMPUTEENGINE-N2-PREDEFINED-VM-CORE']
+    keep_resource_prices(output, 'n2', n2_cpu, n2_ram, {'ondemand': 1, 'sud': n2_sud_discount})
     for k, v in n2_instance_types.items():
         output['n2'][k]['specs'].update({'cores': v['cpu'], 'memory': v['memory'], 'local_ssd': v['local_ssd'],
                                          'network_egress': v['network_egress'], 'benchmark': v['benchmark'],
@@ -1491,6 +1541,7 @@ if __name__ == '__main__':
     # Preemptible
     n2_ram = data['CP-COMPUTEENGINE-N2-PREDEFINED-VM-RAM-PREEMPTIBLE']
     n2_cpu = data['CP-COMPUTEENGINE-N2-PREDEFINED-VM-CORE-PREEMPTIBLE']
+    keep_resource_prices(output, 'n2', n2_cpu, n2_ram, {'preemptible': 1})
     for k, v in n2_instance_types.items():
         for reg, n2_cpu_region_cost in n2_cpu.items():
             for reg2, n2_ram_region_cost in n2_ram.items():
@@ -1500,6 +1551,7 @@ if __name__ == '__main__':
     # CUD - 1 year
     n2_ram = data['CP-COMPUTEENGINE-N2-CUD-1-YEAR-RAM']
     n2_cpu = data['CP-COMPUTEENGINE-N2-CUD-1-YEAR-CPU']
+    keep_resource_prices(output, 'n2', n2_cpu, n2_ram, {'cud-1y': 1})
     for k, v in n2_instance_types.items():
         for reg, n2_cpu_region_cost in n2_cpu.items():
             for reg2, n2_ram_region_cost in n2_ram.items():
@@ -1509,6 +1561,7 @@ if __name__ == '__main__':
     # CUD - 3 year
     n2_ram = data['CP-COMPUTEENGINE-N2-CUD-3-YEAR-RAM']
     n2_cpu = data['CP-COMPUTEENGINE-N2-CUD-3-YEAR-CPU']
+    keep_resource_prices(output, 'n2', n2_cpu, n2_ram, {'cud-3y': 1})
     for k, v in n2_instance_types.items():
         for reg, n2_cpu_region_cost in n2_cpu.items():
             for reg2, n2_ram_region_cost in n2_ram.items():
@@ -1524,6 +1577,7 @@ if __name__ == '__main__':
     # CUD - 1 year
     n1_ram = data['CP-COMPUTEENGINE-N1-CUD-1-YEAR-RAM']
     n1_cpu = data['CP-COMPUTEENGINE-N1-CUD-1-YEAR-CPU']
+    keep_resource_prices(output, 'n1', n1_cpu, n1_ram, {'cud-1y': 1})
     for k, v in n1_instance_types.items():
         for reg, n1_cpu_region_cost in n1_cpu.items():
             for reg2, n1_ram_region_cost in n1_ram.items():
@@ -1533,6 +1587,7 @@ if __name__ == '__main__':
     # CUD - 3 year
     n1_ram = data['CP-COMPUTEENGINE-N1-CUD-3-YEAR-RAM']
     n1_cpu = data['CP-COMPUTEENGINE-N1-CUD-3-YEAR-CPU']
+    keep_resource_prices(output, 'n1', n1_cpu, n1_ram, {'cud-3y': 1})
     for k, v in n1_instance_types.items():
         for reg, n1_cpu_region_cost in n1_cpu.items():
             for reg2, n1_ram_region_cost in n1_ram.items():
@@ -1544,6 +1599,7 @@ if __name__ == '__main__':
     # On Demand and SUD
     n2d_ram = data['CP-COMPUTEENGINE-N2D-PREDEFINED-VM-RAM']
     n2d_cpu = data['CP-COMPUTEENGINE-N2D-PREDEFINED-VM-CORE']
+    keep_resource_prices(output, 'n2d', n2d_cpu, n2d_ram, {'ondemand': 1, 'sud': n2d_sud_discount})
     for k, v in n2d_instance_types.items():
         output['n2d'][k]['specs'].update({'cores': v['cpu'], 'memory': v['memory'], 'local_ssd': v['local_ssd'],
                                           'network_egress': v['network_egress'], 'benchmark': v['benchmark'],
@@ -1560,6 +1616,7 @@ if __name__ == '__main__':
     # Preemptible
     n2d_ram = data['CP-COMPUTEENGINE-N2D-PREDEFINED-VM-RAM-PREEMPTIBLE']
     n2d_cpu = data['CP-COMPUTEENGINE-N2D-PREDEFINED-VM-CORE-PREEMPTIBLE']
+    keep_resource_prices(output, 'n2d', n2d_cpu, n2d_ram, {'preemptible': 1})
     for k, v in n2d_instance_types.items():
         for reg, n2d_cpu_region_cost in n2d_cpu.items():
             for reg2, n2d_ram_region_cost in n2d_ram.items():
@@ -1569,6 +1626,7 @@ if __name__ == '__main__':
     # CUD - 1 year
     n2d_ram = data['CP-COMPUTEENGINE-N2D-CUD-1-YEAR-RAM']
     n2d_cpu = data['CP-COMPUTEENGINE-N2D-CUD-1-YEAR-CPU']
+    keep_resource_prices(output, 'n2d', n2d_cpu, n2d_ram, {'cud-1y': 1})
     for k, v in n2d_instance_types.items():
         for reg, n2d_cpu_region_cost in n2d_cpu.items():
             for reg2, n2d_ram_region_cost in n2d_ram.items():
@@ -1578,6 +1636,7 @@ if __name__ == '__main__':
     # CUD - 3 year
     n2d_ram = data['CP-COMPUTEENGINE-N2D-CUD-3-YEAR-RAM']
     n2d_cpu = data['CP-COMPUTEENGINE-N2D-CUD-3-YEAR-CPU']
+    keep_resource_prices(output, 'n2d', n2d_cpu, n2d_ram, {'cud-3y': 1})
     for k, v in n2d_instance_types.items():
         for reg, n2d_cpu_region_cost in n2d_cpu.items():
             for reg2, n2d_ram_region_cost in n2d_ram.items():
@@ -1589,6 +1648,7 @@ if __name__ == '__main__':
     # On Demand and SUD
     e2_ram = data['CP-COMPUTEENGINE-E2-PREDEFINED-VM-RAM']
     e2_cpu = data['CP-COMPUTEENGINE-E2-PREDEFINED-VM-CORE']
+    keep_resource_prices(output, 'e2', e2_cpu, e2_ram, {'ondemand': 1, 'sud': e2_sud_discount})
     for k, v in e2_instance_types.items():
         output['e2'][k]['specs'].update({'cores': v['cpu'], 'memory': v['memory'], 'local_ssd': v['local_ssd'],
                                          'network_egress': v['network_egress'], 'benchmark': v['benchmark'],
@@ -1605,6 +1665,7 @@ if __name__ == '__main__':
     # Preemptible
     e2_ram = data['CP-COMPUTEENGINE-E2-PREDEFINED-VM-RAM-PREEMPTIBLE']
     e2_cpu = data['CP-COMPUTEENGINE-E2-PREDEFINED-VM-CORE-PREEMPTIBLE']
+    keep_resource_prices(output, 'e2', e2_cpu, e2_ram, {'preemptible': 1})
     for k, v in e2_instance_types.items():
         for reg, e2_cpu_region_cost in e2_cpu.items():
             for reg2, e2_ram_region_cost in e2_ram.items():
@@ -1614,6 +1675,7 @@ if __name__ == '__main__':
     # CUD - 1 year
     e2_ram = data['CP-COMPUTEENGINE-E2-CUD-1-YEAR-RAM']
     e2_cpu = data['CP-COMPUTEENGINE-E2-CUD-1-YEAR-CPU']
+    keep_resource_prices(output, 'e2', e2_cpu, e2_ram, {'cud-1y': 1})
     for k, v in e2_instance_types.items():
         for reg, e2_cpu_region_cost in e2_cpu.items():
             for reg2, e2_ram_region_cost in e2_ram.items():
@@ -1623,6 +1685,7 @@ if __name__ == '__main__':
     # CUD - 3 year
     e2_ram = data['CP-COMPUTEENGINE-E2-CUD-3-YEAR-RAM']
     e2_cpu = data['CP-COMPUTEENGINE-E2-CUD-3-YEAR-CPU']
+    keep_resource_prices(output, 'e2', e2_cpu, e2_ram, {'cud-3y': 1})
     for k, v in e2_instance_types.items():
         for reg, e2_cpu_region_cost in e2_cpu.items():
             for reg2, e2_ram_region_cost in e2_ram.items():
@@ -1634,6 +1697,7 @@ if __name__ == '__main__':
     # On Demand and SUD
     t2d_ram = data['CP-COMPUTEENGINE-T2D-PREDEFINED-VM-RAM']
     t2d_cpu = data['CP-COMPUTEENGINE-T2D-PREDEFINED-VM-CORE']
+    keep_resource_prices(output, 't2d', t2d_cpu, t2d_ram, {'ondemand': 1, 'sud': t2d_sud_discount})
     for k, v in t2d_instance_types.items():
         output['t2d'][k]['specs'].update({'cores': v['cpu'], 'memory': v['memory'], 'local_ssd': v['local_ssd'],
                                           'network_egress': v['network_egress'], 'benchmark': v['benchmark'],
@@ -1650,6 +1714,7 @@ if __name__ == '__main__':
     # Preemptible
     t2d_ram = data['CP-COMPUTEENGINE-T2D-PREDEFINED-VM-RAM-PREEMPTIBLE']
     t2d_cpu = data['CP-COMPUTEENGINE-T2D-PREDEFINED-VM-CORE-PREEMPTIBLE']
+    keep_resource_prices(output, 't2d', t2d_cpu, t2d_ram, {'preemptible': 1})
     for k, v in t2d_instance_types.items():
         for reg, t2d_cpu_region_cost in t2d_cpu.items():
             for reg2, t2d_ram_region_cost in t2d_ram.items():
@@ -1659,6 +1724,7 @@ if __name__ == '__main__':
     # CUD - 1 year
     t2d_ram = data['CP-COMPUTEENGINE-T2D-CUD-1-YEAR-RAM']
     t2d_cpu = data['CP-COMPUTEENGINE-T2D-CUD-1-YEAR-CPU']
+    keep_resource_prices(output, 't2d', t2d_cpu, t2d_ram, {'cud-1y': 1})
     for k, v in t2d_instance_types.items():
         for reg, t2d_cpu_region_cost in t2d_cpu.items():
             for reg2, t2d_ram_region_cost in t2d_ram.items():
@@ -1668,6 +1734,7 @@ if __name__ == '__main__':
     # CUD - 3 year
     t2d_ram = data['CP-COMPUTEENGINE-T2D-CUD-3-YEAR-RAM']
     t2d_cpu = data['CP-COMPUTEENGINE-T2D-CUD-3-YEAR-CPU']
+    keep_resource_prices(output, 't2d', t2d_cpu, t2d_ram, {'cud-3y': 1})
     for k, v in t2d_instance_types.items():
         for reg, t2d_cpu_region_cost in t2d_cpu.items():
             for reg2, t2d_ram_region_cost in t2d_ram.items():
@@ -1679,6 +1746,7 @@ if __name__ == '__main__':
     # On Demand and SUD
     t2a_ram = data['CP-COMPUTEENGINE-T2A-PREDEFINED-VM-RAM']
     t2a_cpu = data['CP-COMPUTEENGINE-T2A-PREDEFINED-VM-CORE']
+    keep_resource_prices(output, 't2a', t2a_cpu, t2a_ram, {'ondemand': 1, 'sud': t2a_sud_discount})
     for k, v in t2a_instance_types.items():
         output['t2a'][k]['specs'].update({'cores': v['cpu'], 'memory': v['memory'], 'local_ssd': v['local_ssd'],
                                           'network_egress': v['network_egress'], 'benchmark': v['benchmark'],
@@ -1695,6 +1763,7 @@ if __name__ == '__main__':
     # Preemptible
     t2a_ram = data['CP-COMPUTEENGINE-T2A-PREDEFINED-VM-RAM-PREEMPTIBLE']
     t2a_cpu = data['CP-COMPUTEENGINE-T2A-PREDEFINED-VM-CORE-PREEMPTIBLE']
+    keep_resource_prices(output, 't2a', t2a_cpu, t2a_ram, {'preemptible': 1})
     for k, v in t2a_instance_types.items():
         for reg, t2a_cpu_region_cost in t2a_cpu.items():
             for reg2, t2a_ram_region_cost in t2a_ram.items():
@@ -1706,6 +1775,7 @@ if __name__ == '__main__':
     # On Demand and SUD
     g2_ram = data['CP-COMPUTEENGINE-G2-PREDEFINED-VM-RAM']
     g2_cpu = data['CP-COMPUTEENGINE-G2-PREDEFINED-VM-CORE']
+    keep_resource_prices(output, 'g2', g2_cpu, g2_ram, {'ondemand': 1, 'sud': g2_sud_discount})
     for k, v in g2_instance_types.items():
         output['g2'][k]['specs'].update({'cores': v['cpu'], 'memory': v['memory'], 'local_ssd': v['local_ssd'],
                                          'network_egress': v['network_egress'], 'benchmark': v['benchmark'],
@@ -1719,6 +1789,7 @@ if __name__ == '__main__':
     # Preemptible
     g2_ram = data['CP-COMPUTEENGINE-G2-PREDEFINED-VM-RAM-PREEMPTIBLE']
     g2_cpu = data['CP-COMPUTEENGINE-G2-PREDEFINED-VM-CORE-PREEMPTIBLE']
+    keep_resource_prices(output, 'g2', g2_cpu, g2_ram, {'preemptible': 1})
     for k, v in g2_instance_types.items():
         for reg, g2_cpu_region_cost in g2_cpu.items():
             for reg2, g2_ram_region_cost in g2_ram.items():
@@ -1727,6 +1798,7 @@ if __name__ == '__main__':
     # CUD - 1 year
     g2_ram = data['CP-COMPUTEENGINE-G2-CUD-1-YEAR-RAM']
     g2_cpu = data['CP-COMPUTEENGINE-G2-CUD-1-YEAR-CPU']
+    keep_resource_prices(output, 'g2', g2_cpu, g2_ram, {'cud-1y': 1})
     for k, v in g2_instance_types.items():
         for reg, g2_cpu_region_cost in g2_cpu.items():
             for reg2, g2_ram_region_cost in g2_ram.items():
@@ -1735,6 +1807,7 @@ if __name__ == '__main__':
     # CUD - 3 year
     g2_ram = data['CP-COMPUTEENGINE-G2-CUD-3-YEAR-RAM']
     g2_cpu = data['CP-COMPUTEENGINE-G2-CUD-3-YEAR-CPU']
+    keep_resource_prices(output, 'g2', g2_cpu, g2_ram, {'cud-3y': 1})
     for k, v in g2_instance_types.items():
         for reg, g2_cpu_region_cost in g2_cpu.items():
             for reg2, g2_ram_region_cost in g2_ram.items():

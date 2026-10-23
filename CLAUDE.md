@@ -140,11 +140,20 @@ The step-by-step release process (changelog, running the Release workflow with a
         ...
       }
     }
+  },
+  "resource_prices": {
+    "<family>": {
+      "<region>": {
+        "<cost class>": {"cores": <float>, "memory": <float>}
+      }
+    }
   }
 }
 ```
 
 18 instance families, 254 instance types, 47+ GCP regions, 5 cost classes.
+
+`resource_prices` holds the hourly price of one vCPU (`cores`) and one GiB (`memory`) for each family the scraper prices from GCP's per-vCPU and per-GiB SKUs (every family but `f1`, `g1`, and `n1`, which only has commitment prices). A machine type's price is `cores * cores price + memory * memory price`, except for the GPU families `a2` and `g2`, whose machine prices also include their GPUs. Code that walks the top-level keys as instance families must skip `resource_prices`, as it already does `license`.
 
 ## Pre-commit Hooks
 
