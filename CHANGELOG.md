@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `c4d`, `n4d` and `n4a` machine types, once `instances.json` is next regenerated
+- The README's usage section includes the `--help` output for every command, generated with cog and checked in CI
 
 ## [1.1.0] - 2026-10-22
 

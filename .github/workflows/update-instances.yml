@@ -75,6 +75,8 @@ jobs:
           } > "$RUNNER_TEMP/report.md"
           cat "$RUNNER_TEMP/report.md" >> "$GITHUB_STEP_SUMMARY"
           cp "$RUNNER_TEMP/instances.json" skrooge/instances.json
+          # The --region choices in the README's CLI help come from instances.json
+          uv run --frozen cog -r README.md
           if git diff --quiet -- skrooge/instances.json; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
@@ -116,7 +118,7 @@ jobs:
             echo "Pull request #${number} already has this data"
           else
             git switch --create "$BRANCH"
-            git add skrooge/instances.json
+            git add skrooge/instances.json README.md
             git commit --quiet --message "$title"
             git push --force "$remote" "HEAD:refs/heads/${BRANCH}"
           fi

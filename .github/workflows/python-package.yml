@@ -31,6 +31,8 @@ jobs:
       run: uv run --frozen ruff check --output-format=github .
     - name: Check formatting with ruff
       run: uv run --frozen ruff format --check .
+    - name: Check the CLI help in README.md is up to date
+      run: uv run --frozen cog --check --diff --check-fail-msg='run "uv run cog -r README.md"' README.md
 
   test:
     runs-on: ubuntu-latest

@@ -56,10 +56,69 @@ Use `--region`, `--cost-class`, and `--format json` to change the region, pricin
 
 If you installed skrooge, drop the `uvx` prefix and run `skrooge` directly (or `python -m skrooge`).
 
-For help, run:
+### Command reference
 
-    uvx skrooge --help
-    uvx skrooge estimate --help
+The help for every command:
+
+<!-- [[[cog
+import cog
+from click.testing import CliRunner
+from skrooge.cli import cli
+
+def show_help(*args):
+    # Click wraps help at 78 columns in any terminal at least 80 columns wide
+    result = CliRunner().invoke(cli, [*args, "--help"], prog_name="skrooge", terminal_width=78)
+    assert result.exit_code == 0, result.output
+    cog.out(f"```\n$ skrooge {' '.join([*args, '--help'])}\n{result.output}```\n")
+
+show_help()
+]]] -->
+```
+$ skrooge --help
+Usage: skrooge [OPTIONS] COMMAND [ARGS]...
+
+  A quick and dirty kubernetes cost estimator
+
+Options:
+  --version  Show the version and exit.
+  --help     Show this message and exit.
+
+Commands:
+  estimate  Quick estimate of the cost or savings a kubernetes scale...
+```
+<!-- [[[end]]] -->
+
+`skrooge estimate` takes these options. The `--region` choices are the regions in the bundled pricing data:
+
+<!-- [[[cog
+show_help("estimate")
+]]] -->
+```
+$ skrooge estimate --help
+Usage: skrooge estimate [OPTIONS]
+
+  Quick estimate of the cost or savings a kubernetes scale update will incur
+
+Options:
+  -v, --verbosity LVL             Either CRITICAL, ERROR, WARNING, INFO or
+                                  DEBUG
+  -r, --replicas INTEGER RANGE    The number of replicas in the deployment
+                                  [x>=1; required]
+  -c, --cpu INTEGER               The amount of CPU change in milli-cores
+                                  [required]
+  -m, --mem INTEGER               The amount of memory change in MiB
+                                  [required]
+  -i, --instance TEXT             The instance type this deployment is running
+                                  on  [required]
+  --cost-class [sud|ondemand|preemptible|cud-1y|cud-3y]
+                                  The type of cost to calculate. Default: sud
+  --region [africa-south1|asia-east1|asia-east2|asia-northeast1|asia-northeast2|asia-northeast3|asia-south1|asia-south2|asia-southeast1|asia-southeast2|asia-southeast3|australia-southeast1|australia-southeast2|europe-central2|europe-north1|europe-north2|europe-southwest1|europe-west1|europe-west2|europe-west3|europe-west4|europe-west5|europe-west6|europe-west8|europe-west9|europe-west10|europe-west12|me-central1|me-central2|me-west1|northamerica-northeast1|northamerica-northeast2|northamerica-south1|southamerica-east1|southamerica-west1|us-central1|us-east1|us-east4|us-east5|us-east7|us-south1|us-west1|us-west2|us-west3|us-west4|us-west8]
+                                  The region to use for cost calculation.
+                                  Default: us-central1
+  -f, --format [english|json]     The output format. Default: english
+  --help                          Show this message and exit.
+```
+<!-- [[[end]]] -->
 
 ## Development
 
@@ -76,6 +135,10 @@ To lint and format:
 
     uv run ruff check .
     uv run ruff format .
+
+The CLI help in the [command reference](#command-reference) is generated with [cog](https://cog.readthedocs.io/). After changing a command or option, update it with:
+
+    uv run cog -r README.md
 
 To run the same checks automatically on each commit, install the [pre-commit](https://pre-commit.com/) hooks:
 
