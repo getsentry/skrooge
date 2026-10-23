@@ -209,6 +209,10 @@ def test_missing_pricing_suggests_alternatives(instance_data):
         result.output
     )
     assert "Similar regions with sud pricing for n1-highcpu-16:" in result.output
+    assert (
+        "List them all with: skrooge regions --instance n1-highcpu-16 --cost-class sud"
+        in result.output
+    )
 
 
 def test_shared_core_instance_type_is_rejected():
@@ -236,3 +240,55 @@ def test_zero_cpu_and_mem_is_rejected():
     )
     assert result.exit_code == 2
     assert "--cpu and --mem can't both be 0" in result.output
+
+
+def test_estimate_help_leaves_out_the_region_choices():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["estimate", "--help"])
+    assert result.exit_code == 0
+    assert "--region REGION" in result.output
+    assert "us-central1|" not in result.output
+
+
+@pytest.mark.parametrize(
+    ("args", "regions"),
+    [
+        ([], ["europe-west2", "europe-west10", "us-central1", "us-east4", "us-east5"]),
+        (["--instance", "n1-highcpu-16"], ["us-central1", "us-east4", "us-east5"]),
+        (["--cost-class", "cud-1y"], ["us-central1", "us-east5"]),
+        (
+            ["--instance", "n1-highcpu-16", "--cost-class", "SUD"],
+            ["us-central1", "us-east4"],
+        ),
+    ],
+)
+def test_regions(instance_data, args, regions):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["regions", *args])
+    assert result.exit_code == 0
+    assert result.output.splitlines() == regions
+
+
+def test_regions_with_no_match(instance_data):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["regions", "--instance", "n1-highcpu-16", "--cost-class", "preemptible"]
+    )
+    assert result.exit_code == 1
+    assert "No region has preemptible pricing for n1-highcpu-16." in result.output
+
+
+def test_regions_for_invalid_instance_type_provides_similar_instances(instance_data):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["regions", "--instance", "n2-standard-30"])
+    assert result.exit_code == 2
+    assert "n2-standard-30 not found. Did you mean: n2-standard-32" in result.output
+
+
+def test_invalid_instance_family_provides_similar_families(instance_data):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["regions", "--instance", "n9-standard-8"])
+    assert result.exit_code == 2
+    assert "n9 instance family not found. Did you mean:" in result.output
+    assert "n1" in result.output
+    assert "n2" in result.output

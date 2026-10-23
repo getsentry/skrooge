@@ -54,12 +54,85 @@ Use `--region`, `--cost-class`, and `--format json` to change the region, pricin
 
     uvx skrooge estimate --replicas 1000 --cpu 5810 --mem 9950 --instance n2-highcpu-64 --region europe-west1 --cost-class cud-1y --format json
 
+Not every instance type has every cost class in every region. To list the regions with pricing for an instance type and cost class:
+
+    uvx skrooge regions --instance n2-highcpu-64 --cost-class cud-1y
+
 If you installed skrooge, drop the `uvx` prefix and run `skrooge` directly (or `python -m skrooge`).
 
-For help, run:
+### Command reference
 
-    uvx skrooge --help
-    uvx skrooge estimate --help
+The help for every command:
+
+<!-- [[[cog
+import cog
+from click.testing import CliRunner
+from skrooge.cli import cli
+
+def show_help(*args):
+    # Click wraps help at 78 columns in any terminal at least 80 columns wide
+    result = CliRunner().invoke(cli, [*args, "--help"], prog_name="skrooge", terminal_width=78)
+    assert result.exit_code == 0, result.output
+    cog.out(f"```\n$ skrooge {' '.join([*args, '--help'])}\n{result.output}```\n")
+
+show_help()
+show_help("estimate")
+show_help("regions")
+]]] -->
+```
+$ skrooge --help
+Usage: skrooge [OPTIONS] COMMAND [ARGS]...
+
+  A quick and dirty kubernetes cost estimator
+
+Options:
+  --version  Show the version and exit.
+  --help     Show this message and exit.
+
+Commands:
+  estimate  Quick estimate of the cost or savings a kubernetes scale...
+  regions   List the regions skrooge has pricing for
+```
+```
+$ skrooge estimate --help
+Usage: skrooge estimate [OPTIONS]
+
+  Quick estimate of the cost or savings a kubernetes scale update will incur
+
+Options:
+  -v, --verbosity LVL             Either CRITICAL, ERROR, WARNING, INFO or
+                                  DEBUG
+  -r, --replicas INTEGER RANGE    The number of replicas in the deployment
+                                  [x>=1; required]
+  -c, --cpu INTEGER               The amount of CPU change in milli-cores
+                                  [required]
+  -m, --mem INTEGER               The amount of memory change in MiB
+                                  [required]
+  -i, --instance TEXT             The instance type this deployment is running
+                                  on  [required]
+  --cost-class [sud|ondemand|preemptible|cud-1y|cud-3y]
+                                  The type of cost to calculate. Default: sud
+  --region REGION                 The region to use for cost calculation.
+                                  Default: us-central1. List them with:
+                                  skrooge regions
+  -f, --format [english|json]     The output format. Default: english
+  --help                          Show this message and exit.
+```
+```
+$ skrooge regions --help
+Usage: skrooge regions [OPTIONS]
+
+  List the regions skrooge has pricing for
+
+Options:
+  -i, --instance TEXT             Only list regions with pricing for this
+                                  instance type
+  --cost-class [sud|ondemand|preemptible|cud-1y|cud-3y]
+                                  Only list regions with pricing in this cost
+                                  class
+  --help                          Show this message and exit.
+```
+<!-- [[[end]]] -->
 
 ## Development
 
@@ -76,6 +149,12 @@ To lint and format:
 
     uv run ruff check .
     uv run ruff format .
+
+The CLI help in the [command reference](#command-reference) is generated with [cog](https://cog.readthedocs.io/). After changing a command or option, update it with:
+
+    uv run cog -r README.md
+
+If you forget, CI's `readme` check fails. On a pull request from a branch in this repository, CI also commits the regenerated help to the branch for you; on pull requests from forks, run cog yourself.
 
 To run the same checks automatically on each commit, install the [pre-commit](https://pre-commit.com/) hooks:
 

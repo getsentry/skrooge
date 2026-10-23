@@ -9,11 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `estimate --help` no longer lists every `--region` choice; use `skrooge regions` instead
 - The price scraper now reads prices from GCP's Cloud Billing Catalog API, as the pricing calculator price list it used is gone. A daily workflow opens a pull request when prices change, with a report of what changed.
 
 ### Added
 
 - `c4d`, `n4d` and `n4a` machine types, once `instances.json` is next regenerated
+- `regions` command, which lists the regions skrooge has pricing for, optionally only for an `--instance` type and `--cost-class`. When an instance type has no pricing in the chosen region and cost class, `estimate` suggests the matching `regions` command.
+- The README's usage section includes the `--help` output for every command, generated with cog and checked in CI
 
 ## [1.1.0] - 2026-10-22
 

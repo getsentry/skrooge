@@ -1,4 +1,5 @@
-# This workflow lints, tests across all supported Python versions, and checks that the package builds and runs
+# This workflow lints, keeps the CLI help in README.md up to date, tests across all supported Python versions, and
+# checks that the package builds and runs
 # For more information see: https://docs.astral.sh/uv/guides/integration/github/
 
 name: Python package
@@ -31,6 +32,81 @@ jobs:
       run: uv run --frozen ruff check --output-format=github .
     - name: Check formatting with ruff
       run: uv run --frozen ruff format --check .
+
+  # Regenerates the CLI help in README.md with cog, and fails if the help is stale, so a stale
+  # commit can't be merged. On a pull request from a branch in this repository, readme-push
+  # then pushes the fix to the branch. cog runs the pull request's code, so this job gets no
+  # secrets.
+  readme:
+    runs-on: ubuntu-latest
+    outputs:
+      # The regenerated README.md, base64-encoded, if it changed
+      readme: ${{ steps.cog.outputs.readme }}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        # The pull request's own commit rather than the merge commit, so a fix can be pushed to it
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        persist-credentials: false
+    - name: Set up uv
+      uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+    - name: Install dependencies
+      run: uv sync --locked
+    - name: Regenerate the CLI help
+      id: cog
+      run: |
+        uv run --frozen cog -r README.md
+        if ! git diff --exit-code -- README.md; then
+          echo "readme=$(base64 --wrap=0 README.md)" >> "$GITHUB_OUTPUT"
+        fi
+    - name: Fail if the help is out of date
+      if: steps.cog.outputs.readme != ''
+      run: |
+        echo '::error file=README.md::The CLI help in README.md is out of date. Run "uv run cog -r README.md" and commit the result. On a pull request from a branch in this repository, readme-push commits it for you.'
+        exit 1
+
+  # Pushes the help that readme regenerated to the pull request's branch. It never runs the pull
+  # request's code, which could otherwise steal the token. A push with GITHUB_TOKEN wouldn't
+  # trigger CI on the new commit. Secrets aren't available to pull requests from forks or
+  # Dependabot.
+  readme-push:
+    needs: readme
+    # readme fails when the help is stale, so run anyway
+    if: >-
+      !cancelled()
+      && needs.readme.outputs.readme != ''
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+        persist-credentials: false
+    - name: Get auth token
+      id: token
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+      with:
+        client-id: ${{ vars.SENTRY_RELEASE_BOT_CLIENT_ID }}
+        private-key: ${{ secrets.SENTRY_RELEASE_BOT_PRIVATE_KEY }}
+        permission-contents: write
+    - name: Push the regenerated help to the pull request
+      env:
+        README_BASE64: ${{ needs.readme.outputs.readme }}
+        GH_TOKEN: ${{ steps.token.outputs.token }}
+        APP_SLUG: ${{ steps.token.outputs.app-slug }}
+        HEAD_REF: ${{ github.head_ref }}
+      run: |
+        set -euo pipefail
+        printf '%s' "$README_BASE64" | base64 --decode > README.md
+        bot="${APP_SLUG}[bot]"
+        bot_id="$(gh api "/users/${bot}" --jq .id)"
+        git config user.name "$bot"
+        git config user.email "${bot_id}+${bot}@users.noreply.github.com"
+        git commit --quiet --message "docs: Regenerate the CLI help in README.md" -- README.md
+        # Fails if the branch has moved on; the run for its new commit takes over
+        git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${HEAD_REF}"
+        echo "::notice file=README.md::Pushed the regenerated CLI help to ${HEAD_REF}"
 
   test:
     runs-on: ubuntu-latest

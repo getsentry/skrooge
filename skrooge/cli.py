@@ -21,6 +21,7 @@ package_logger = logging.getLogger("skrooge")
 click_log.basic_config(package_logger)
 
 COST_CLASSES = ["sud", "ondemand", "preemptible", "cud-1y", "cud-3y"]
+MISSING_INSTANCE_TYPE_LINK = "https://github.com/getsentry/skrooge/issues/new?assignees=&labels=&projects=&template=BUG_REPORT.md"
 
 
 @functools.cache
@@ -30,22 +31,55 @@ def load_instance_types():
     )
 
 
-def available_regions():
+def available_regions(cost_class=None, instance_data=None):
+    "Regions with pricing, optionally only in one cost class or for one instance type"
+    if instance_data is None:
+        all_instance_data = [
+            data
+            for family in load_instance_types().values()
+            for data in family.values()
+            if data
+        ]
+    else:
+        all_instance_data = [instance_data]
     # Skip aggregate pricing keys such as "us" or "asia-east"; GCP regions end in a digit
     return sorted(
         {
             region
-            for family in load_instance_types().values()
-            for instance_data in family.values()
-            if instance_data
-            for region in instance_data.get("regions", {})
-            if region[-1].isdigit()
+            for data in all_instance_data
+            for region, prices in data.get("regions", {}).items()
+            if region[-1].isdigit() and (cost_class is None or cost_class in prices)
         },
         # Natural sort, so europe-west2 comes before europe-west10
         key=lambda region: [
             int(part) if part.isdigit() else part for part in re.split(r"(\d+)", region)
         ],
     )
+
+
+def find_instance_type(instance):
+    "Look up an instance type's data, suggesting similar ones if it doesn't exist"
+    instance_family = instance.split("-")[0]
+    instance_types = load_instance_types()
+
+    try:
+        return instance_types[instance_family][instance]
+    except KeyError:
+        try:
+            close_matches = difflib.get_close_matches(
+                instance, instance_types[instance_family].keys()
+            )
+        except KeyError:
+            logger.info(f"{instance_family}, {instance_types.keys()}")
+            close_matches = difflib.get_close_matches(
+                instance_family, instance_types.keys(), cutoff=0.4
+            )
+            raise click.BadParameter(
+                f"{instance_family} instance family not found. Did you mean: {', '.join(close_matches)}\nMissing an instance family that exists? {MISSING_INSTANCE_TYPE_LINK}"
+            ) from None
+        raise click.BadParameter(
+            f"{instance} not found. Did you mean: {', '.join(close_matches)}\nMissing an instance type that exists? {MISSING_INSTANCE_TYPE_LINK}"
+        ) from None
 
 
 @click.group()
@@ -91,8 +125,10 @@ def cli():
 )
 @click.option(
     "--region",
-    help="The region to use for cost calculation. Default: us-central1",
+    help="The region to use for cost calculation. Default: us-central1. List them with: skrooge regions",
     type=click.Choice(available_regions(), case_sensitive=False),
+    # The choices are long, so leave them out of --help
+    metavar="REGION",
     default="us-central1",
 )
 @click.option(
@@ -110,29 +146,7 @@ def estimate(replicas, cpu, mem, instance, cost_class, region, format):
     logger.info(f"{instance=}")
 
     instance_family = instance.split("-")[0]
-
-    instance_types = load_instance_types()
-
-    missing_instance_type_link = "https://github.com/getsentry/skrooge/issues/new?assignees=&labels=&projects=&template=BUG_REPORT.md"
-
-    try:
-        instance_data = instance_types[instance_family][instance]
-    except KeyError:
-        try:
-            close_matches = difflib.get_close_matches(
-                instance, instance_types[instance_family].keys()
-            )
-        except KeyError:
-            logger.info(f"{instance_family}, {instance_types.keys()}")
-            close_matches = difflib.get_close_matches(
-                instance_family, instance_types.keys(), cutoff=0.4
-            )
-            raise click.BadParameter(
-                f"{instance_family} instance family not found. Did you mean: {', '.join(close_matches)}\nMissing an instance family that exists? {missing_instance_type_link}"
-            ) from None
-        raise click.BadParameter(
-            f"{instance} not found. Did you mean: {', '.join(close_matches)}\nMissing an instance type that exists? {missing_instance_type_link}"
-        ) from None
+    instance_data = find_instance_type(instance)
 
     if not all(
         isinstance(instance_data["specs"][resource], (int, float))
@@ -147,11 +161,7 @@ def estimate(replicas, cpu, mem, instance, cost_class, region, format):
 
     prices = instance_data["regions"].get(region, {})
     if cost_class not in prices:
-        regions_with_pricing = [
-            r
-            for r, p in instance_data["regions"].items()
-            if cost_class in p and r[-1].isdigit()
-        ]
+        regions_with_pricing = available_regions(cost_class, instance_data)
         suggestions = []
         if prices:
             suggestions.append(
@@ -161,6 +171,10 @@ def estimate(replicas, cpu, mem, instance, cost_class, region, format):
         if close_matches:
             suggestions.append(
                 f"Similar regions with {cost_class} pricing for {instance}: {', '.join(close_matches)}"
+            )
+        if regions_with_pricing:
+            suggestions.append(
+                f"List them all with: skrooge regions --instance {instance} --cost-class {cost_class}"
             )
         raise click.BadParameter(
             "\n".join(
@@ -213,6 +227,28 @@ def estimate(replicas, cpu, mem, instance, cost_class, region, format):
     logger.info(f"{data=}")
 
     render(format=format, data=data)
+
+
+@cli.command(name="regions")
+@click.option(
+    "-i",
+    "--instance",
+    help="Only list regions with pricing for this instance type",
+)
+@click.option(
+    "--cost-class",
+    help="Only list regions with pricing in this cost class",
+    type=click.Choice(COST_CLASSES, case_sensitive=False),
+)
+def regions(instance, cost_class):
+    "List the regions skrooge has pricing for"
+    instance_data = find_instance_type(instance) if instance else None
+    matching_regions = available_regions(cost_class, instance_data)
+    if not matching_regions:
+        raise click.ClickException(
+            f"No region has {cost_class or 'any'} pricing for {instance or 'any instance type'}."
+        )
+    click.echo("\n".join(matching_regions))
 
 
 if __name__ == "__main__":

@@ -46,7 +46,7 @@ uv sync
 
 This creates `.venv` with the package (editable) and the `dev` group. Dependencies defined in `pyproject.toml`:
 - **Runtime**: `click`, `click-log`
-- **`dev` group** (installed by default): `pytest`, `pytest-cov`, `ruff`
+- **`dev` group** (installed by default): `cogapp`, `pytest`, `pytest-cov`, `ruff`
 
 The scraper only uses the standard library.
 
@@ -67,6 +67,9 @@ uv run ruff check .
 # Format
 uv run ruff format .
 
+# Regenerate the CLI help in README.md (CI pushes it to same-repo PR branches if you forget)
+uv run cog -r README.md
+
 # Build the sdist and wheel into dist/
 uv build
 
@@ -79,7 +82,7 @@ uv run python -m skrooge.scraper diff skrooge/instances.json new.json
 
 The codebase follows a simple three-module pattern:
 
-- **`cli.py`**: Defines the Click CLI group and `estimate` command. Loads `instances.json` (cached by `load_instance_types()`), derives the `--region` choices from it, validates the instance type (with fuzzy matching via `difflib`) and that the chosen region and cost class have pricing, and orchestrates the calculation pipeline. Not every instance type has every cost class in every region, so never index pricing without checking.
+- **`cli.py`**: Defines the Click CLI group and the `estimate` and `regions` commands. Loads `instances.json` (cached by `load_instance_types()`), derives the `--region` choices from it with `available_regions()` (which `regions` also uses, optionally filtered by instance type and cost class), validates the instance type with `find_instance_type()` (with fuzzy matching via `difflib`) and that the chosen region and cost class have pricing, and orchestrates the calculation pipeline. `--region` uses `metavar="REGION"` so `estimate --help` (and the README help generated from it) doesn't list every region and doesn't change when the price data does. Not every instance type has every cost class in every region, so never index pricing without checking.
 - **`utils.py`**: Pure calculation functions:
   - `determine_constrained_resource()` — determines if CPU or memory is the limiting factor
   - `determine_instance_count_required()` — calculates how many instances are needed
@@ -92,7 +95,7 @@ Data flow: CLI parses args → loads instance data → calls utils for calculati
 
 Tests use `pytest`, configured in the native `[tool.pytest]` table in `pyproject.toml` with `strict = true` and `filterwarnings = ["error"]`, so any warning (including deprecations from Click) fails the suite. CLI tests use Click's `CliRunner` for integration testing; don't use `runner.isolated_filesystem()`, which is deprecated in Click 8.5.
 
-- `tests/test_skrooge.py`: CLI integration tests (version flag, invalid input handling, negative value normalization, cost output verification, verbosity logging). Tests that check prices or which regions and cost classes exist use the `instance_data` fixture's fixed data, not the bundled `instances.json`, so the automated price updates don't break them.
+- `tests/test_skrooge.py`: CLI integration tests (version flag, invalid input handling, negative value normalization, cost output verification, verbosity logging, `regions` filters). Tests that check prices or which regions and cost classes exist use the `instance_data` fixture's fixed data, not the bundled `instances.json`, so the automated price updates don't break them.
 - `tests/test_utils.py`: Unit tests for `determine_constrained_resource` and `determine_instance_count_required` with a c2-standard-30 fixture
 
 - `tests/test_scraper.py`: Unit tests for the scraper against `tests/fixtures/billing_catalog_skus.json`, with no network access
@@ -103,7 +106,7 @@ Test data uses a hardcoded `c2_standard_30_instance_data` dict rather than loadi
 
 GitHub Actions workflows target `main` branch:
 
-- **`python-package.yml`**: On every push/PR to main, runs three jobs: `lint` (`ruff check` and `ruff format --check`), `test` (`pytest --cov` across Python 3.11–3.15, uploading coverage to Codecov), and `package` (`uv build`, then runs the CLI from the built wheel).
+- **`python-package.yml`**: On every push/PR to main, runs these jobs: `lint` (`ruff check` and `ruff format --check`), `readme` (runs `cog -r README.md` on the PR's head commit, and fails if the help changed, so a stale commit can't be merged), `readme-push` (on same-repo PRs, except Dependabot's, which get no secrets, commits the README that `readme` regenerated and pushes it to the PR branch with the Sentry release bot's token; it's a separate job that never runs the PR's code, so that code can't steal the token), `test` (`pytest --cov` across Python 3.11–3.15, uploading coverage to Codecov), and `package` (`uv build`, then runs the CLI from the built wheel).
 - **`publish.yml`**: Triggered by pushes to `release/**` branches. Runs tests, then builds with `uv build` and uploads `dist/*` as a workflow artifact named after the commit SHA, which Craft publishes to PyPI.
 - **`release.yml`**: Manual workflow dispatch using Sentry's Craft for version bumping (via `scripts/bump-version.sh`, which needs uv), changelog generation, and GitHub releases.
 - **`changelog-preview.yml`**: Previews changelog entries on PRs.
@@ -122,6 +125,7 @@ The step-by-step release process (changelog, running the Release workflow with a
 - **Package data**: Read bundled files with `importlib.resources.files("skrooge")`, not paths relative to `__file__`.
 - **Imports**: Standard library first, third-party second, local (relative) imports third (enforced by ruff's `I` rules).
 - **No type annotations**: The codebase does not use type hints consistently.
+- **README help**: The `--help` output in `README.md` is generated by [cog](https://cog.readthedocs.io/) from the `[[[cog ... ]]]` blocks; don't edit it by hand. Run `uv run cog -r README.md` after changing any command, option or help text.
 - **Units**: CPU in milli-cores, memory in MiB. Instance specs use cores and GiB.
 
 ## Key Data
