@@ -1,4 +1,5 @@
-# This workflow lints, tests across all supported Python versions, and checks that the package builds and runs
+# This workflow lints, keeps the CLI help in README.md up to date, tests across all supported Python versions, and
+# checks that the package builds and runs
 # For more information see: https://docs.astral.sh/uv/guides/integration/github/
 
 name: Python package
@@ -31,8 +32,64 @@ jobs:
       run: uv run --frozen ruff check --output-format=github .
     - name: Check formatting with ruff
       run: uv run --frozen ruff format --check .
-    - name: Check the CLI help in README.md is up to date
-      run: uv run --frozen cog --check --diff --check-fail-msg='run "uv run cog -r README.md"' README.md
+
+  # Regenerates the CLI help in README.md with cog. On a pull request from a branch in this
+  # repository, it pushes any change to the branch; otherwise it fails if the help is stale.
+  readme:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        # The pull request's own commit rather than the merge commit, so a fix can be pushed to it
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        persist-credentials: false
+    - name: Set up uv
+      uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+    - name: Install dependencies
+      run: uv sync --locked
+    - name: Regenerate the CLI help
+      id: cog
+      run: |
+        uv run --frozen cog -r README.md
+        if git diff --exit-code -- README.md; then
+          echo "changed=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+        fi
+    # Secrets aren't available to pull requests from forks or Dependabot, and a push with
+    # GITHUB_TOKEN wouldn't trigger CI on the new commit
+    - name: Get auth token
+      id: token
+      if: >-
+        steps.cog.outputs.changed == 'true'
+        && github.event.pull_request.head.repo.full_name == github.repository
+        && github.actor != 'dependabot[bot]'
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+      with:
+        client-id: ${{ vars.SENTRY_RELEASE_BOT_CLIENT_ID }}
+        private-key: ${{ secrets.SENTRY_RELEASE_BOT_PRIVATE_KEY }}
+        permission-contents: write
+    - name: Push the regenerated help to the pull request
+      if: steps.token.outcome == 'success'
+      env:
+        GH_TOKEN: ${{ steps.token.outputs.token }}
+        APP_SLUG: ${{ steps.token.outputs.app-slug }}
+        HEAD_REF: ${{ github.head_ref }}
+      run: |
+        set -euo pipefail
+        bot="${APP_SLUG}[bot]"
+        bot_id="$(gh api "/users/${bot}" --jq .id)"
+        git config user.name "$bot"
+        git config user.email "${bot_id}+${bot}@users.noreply.github.com"
+        git commit --quiet --message "docs: Regenerate the CLI help in README.md" -- README.md
+        # Fails if the branch has moved on; the run for its new commit takes over
+        git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${HEAD_REF}"
+        echo "::notice file=README.md::Pushed the regenerated CLI help to ${HEAD_REF}"
+    - name: Fail if the help is out of date
+      if: steps.cog.outputs.changed == 'true' && steps.token.outcome != 'success'
+      run: |
+        echo '::error file=README.md::The CLI help in README.md is out of date. Run "uv run cog -r README.md" and commit the result.'
+        exit 1
 
   test:
     runs-on: ubuntu-latest

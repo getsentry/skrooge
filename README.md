@@ -154,6 +154,8 @@ The CLI help in the [command reference](#command-reference) is generated with [c
 
     uv run cog -r README.md
 
+If you forget, CI regenerates it and pushes a commit to your pull request's branch. That needs the branch to be in this repository; on pull requests from forks, CI fails until you run cog yourself.
+
 To run the same checks automatically on each commit, install the [pre-commit](https://pre-commit.com/) hooks:
 
     uv tool install pre-commit
