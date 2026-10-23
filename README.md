@@ -91,7 +91,7 @@ Options:
 
 Commands:
   estimate  Quick estimate of the cost or savings a kubernetes scale...
-  regions   List the regions skrooge has pricing for
+  regions   List the regions skrooge has prices for
 ```
 ```
 $ skrooge estimate --help
@@ -122,7 +122,7 @@ Options:
 $ skrooge regions --help
 Usage: skrooge regions [OPTIONS]
 
-  List the regions skrooge has pricing for
+  List the regions skrooge has prices for
 
 Options:
   -i, --instance TEXT             Only list regions with pricing for this
