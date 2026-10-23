@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample-app
+  labels:
+    app: sample-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: sample-app
+  template:
+    metadata:
+      labels:
+        app: sample-app
+    spec:
+      containers:
+      - name: app
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "1000m"
+            memory: "2048Mi"
+          limits:
+            cpu: "2000m"
+            memory: "4096Mi"
+      - name: sidecar
+        image: busybox:latest
+        command: ["sleep", "3600"]
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1024Mi"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: sample-database
+spec:
+  replicas: 2
+  serviceName: sample-database
+  selector:
+    matchLabels:
+      app: sample-database
+  template:
+    metadata:
+      labels:
+        app: sample-database
+    spec:
+      containers:
+      - name: database
+        image: postgres:13
+        env:
+        - name: POSTGRES_PASSWORD
+          value: "password"
+        resources:
+          requests:
+            cpu: "2000m"
+            memory: "4096Mi"
+          limits:
+            cpu: "4000m"
+            memory: "8192Mi"

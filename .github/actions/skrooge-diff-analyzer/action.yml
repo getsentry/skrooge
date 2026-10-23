@@ -1,0 +1,435 @@
+name: "Skrooge Diff Analyzer"
+description: "Analyze changed Kubernetes manifests in PR and provide cost comparison"
+
+inputs:
+  manifest-path:
+    description: "Path to Kubernetes manifest directory"
+    required: false
+    default: "k8s/materialized_manifests"
+  instance:
+    description: "Instance type this deployment is running on"
+    required: true
+  cost-class:
+    description: "Type of cost to calculate"
+    required: false
+    default: "sud"
+  region:
+    description: "Region to use for cost calculation"
+    required: false
+    default: "us-central1"
+  format:
+    description: "Output format (english or json)"
+    required: false
+    default: "english"
+  github-token:
+    description: "GitHub token for commenting on PRs"
+    required: true
+  comment-prefix:
+    description: "Prefix for the comment"
+    required: false
+    default: "## 💰 Kubernetes Cost Impact Analysis"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.8"
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        pip install skrooge pyyaml
+
+    - name: Get changed files
+      id: changed-files
+      shell: bash
+      run: |
+        # Get list of changed files in the PR
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          # For PRs, get files changed between base and head
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E '\.(yaml|yml)$' | grep -E 'deployment\.(yaml|yml)$' || true)
+        else
+          # For pushes, get files changed in the last commit
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | grep -E '\.(yaml|yml)$' | grep -E 'deployment\.(yaml|yml)$' || true)
+        fi
+
+        echo "changed_files<<EOF" >> $GITHUB_OUTPUT
+        echo "$CHANGED_FILES" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+        echo "Changed deployment files:"
+        echo "$CHANGED_FILES"
+
+    - name: Analyze manifest changes
+      id: analyze-changes
+      shell: bash
+      run: |
+        python -c "
+        import yaml
+        import os
+        import json
+        import subprocess
+        import sys
+
+        def parse_manifest_file(file_path):
+            \"\"\"Parse a single manifest file and extract resource requirements.\"\"\"
+            total_cpu = 0
+            total_mem = 0
+            total_replicas = 0
+            resources_found = []
+
+            try:
+                with open(file_path, 'r') as f:
+                    docs = list(yaml.safe_load_all(f))
+
+                for doc in docs:
+                    if doc and isinstance(doc, dict):
+                        # Handle Deployment
+                        if doc.get('kind') == 'Deployment':
+                            replicas = doc.get('spec', {}).get('replicas', 1)
+                            total_replicas += replicas
+
+                            containers = doc.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [])
+                            for container in containers:
+                                resources = container.get('resources', {})
+                                requests = resources.get('requests', {})
+
+                                # Parse CPU (convert to milli-cores)
+                                cpu_str = requests.get('cpu', '0')
+                                if cpu_str.endswith('m'):
+                                    cpu = int(cpu_str[:-1])
+                                else:
+                                    cpu = int(float(cpu_str) * 1000)
+                                total_cpu += cpu * replicas
+
+                                # Parse memory (convert to MiB)
+                                mem_str = requests.get('memory', '0')
+                                if mem_str.endswith('Mi'):
+                                    mem = int(mem_str[:-2])
+                                elif mem_str.endswith('Gi'):
+                                    mem = int(float(mem_str[:-2]) * 1024)
+                                else:
+                                    mem = int(mem_str) // (1024 * 1024)  # Assume bytes
+                                total_mem += mem * replicas
+
+                                resources_found.append({
+                                    'container': container.get('name', 'unknown'),
+                                    'cpu': cpu,
+                                    'memory': mem,
+                                    'replicas': replicas
+                                })
+
+                        # Handle StatefulSet
+                        elif doc.get('kind') == 'StatefulSet':
+                            replicas = doc.get('spec', {}).get('replicas', 1)
+                            total_replicas += replicas
+
+                            containers = doc.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [])
+                            for container in containers:
+                                resources = container.get('resources', {})
+                                requests = resources.get('requests', {})
+
+                                cpu_str = requests.get('cpu', '0')
+                                if cpu_str.endswith('m'):
+                                    cpu = int(cpu_str[:-1])
+                                else:
+                                    cpu = int(float(cpu_str) * 1000)
+                                total_cpu += cpu * replicas
+
+                                mem_str = requests.get('memory', '0')
+                                if mem_str.endswith('Mi'):
+                                    mem = int(mem_str[:-2])
+                                elif mem_str.endswith('Gi'):
+                                    mem = int(float(mem_str[:-2]) * 1024)
+                                else:
+                                    mem = int(mem_str) // (1024 * 1024)
+                                total_mem += mem * replicas
+
+                                resources_found.append({
+                                    'container': container.get('name', 'unknown'),
+                                    'cpu': cpu,
+                                    'memory': mem,
+                                    'replicas': replicas
+                                })
+
+            except Exception as e:
+                print(f'Error parsing {file_path}: {e}')
+
+            return {
+                'cpu': total_cpu,
+                'mem': total_mem,
+                'replicas': total_replicas,
+                'resources': resources_found
+            }
+
+        def get_file_content_at_ref(file_path, ref):
+            \"\"\"Get the content of a file at a specific git reference.\"\"\"
+            try:
+                result = subprocess.run(['git', 'show', f'{ref}:{file_path}'],
+                                      capture_output=True, text=True, check=True)
+                return result.stdout
+            except subprocess.CalledProcessError:
+                return None
+
+        def parse_manifest_content(content):
+            \"\"\"Parse manifest content and extract resource requirements.\"\"\"
+            if not content:
+                return {'cpu': 0, 'mem': 0, 'replicas': 0, 'resources': []}
+
+            total_cpu = 0
+            total_mem = 0
+            total_replicas = 0
+            resources_found = []
+
+            try:
+                docs = list(yaml.safe_load_all(content))
+
+                for doc in docs:
+                    if doc and isinstance(doc, dict):
+                        if doc.get('kind') == 'Deployment':
+                            replicas = doc.get('spec', {}).get('replicas', 1)
+                            total_replicas += replicas
+
+                            containers = doc.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [])
+                            for container in containers:
+                                resources = container.get('resources', {})
+                                requests = resources.get('requests', {})
+
+                                cpu_str = requests.get('cpu', '0')
+                                if cpu_str.endswith('m'):
+                                    cpu = int(cpu_str[:-1])
+                                else:
+                                    cpu = int(float(cpu_str) * 1000)
+                                total_cpu += cpu * replicas
+
+                                mem_str = requests.get('memory', '0')
+                                if mem_str.endswith('Mi'):
+                                    mem = int(mem_str[:-2])
+                                elif mem_str.endswith('Gi'):
+                                    mem = int(float(mem_str[:-2]) * 1024)
+                                else:
+                                    mem = int(mem_str) // (1024 * 1024)
+                                total_mem += mem * replicas
+
+                                resources_found.append({
+                                    'container': container.get('name', 'unknown'),
+                                    'cpu': cpu,
+                                    'memory': mem,
+                                    'replicas': replicas
+                                })
+
+                        elif doc.get('kind') == 'StatefulSet':
+                            replicas = doc.get('spec', {}).get('replicas', 1)
+                            total_replicas += replicas
+
+                            containers = doc.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [])
+                            for container in containers:
+                                resources = container.get('resources', {})
+                                requests = resources.get('requests', {})
+
+                                cpu_str = requests.get('cpu', '0')
+                                if cpu_str.endswith('m'):
+                                    cpu = int(cpu_str[:-1])
+                                else:
+                                    cpu = int(float(cpu_str) * 1000)
+                                total_cpu += cpu * replicas
+
+                                mem_str = requests.get('memory', '0')
+                                if mem_str.endswith('Mi'):
+                                    mem = int(mem_str[:-2])
+                                elif mem_str.endswith('Gi'):
+                                    mem = int(float(mem_str[:-2]) * 1024)
+                                else:
+                                    mem = int(mem_str) // (1024 * 1024)
+                                total_mem += mem * replicas
+
+                                resources_found.append({
+                                    'container': container.get('name', 'unknown'),
+                                    'cpu': cpu,
+                                    'memory': mem,
+                                    'replicas': replicas
+                                })
+
+            except Exception as e:
+                print(f'Error parsing content: {e}')
+
+            return {
+                'cpu': total_cpu,
+                'mem': total_mem,
+                'replicas': total_replicas,
+                'resources': resources_found
+            }
+
+        # Get changed files from previous step
+        changed_files = '''${{ steps.changed-files.outputs.changed_files }}'''.strip().split('\n')
+        changed_files = [f for f in changed_files if f]  # Remove empty lines
+
+        if not changed_files:
+            print('No deployment files changed')
+            print('::set-output name=has_changes::false')
+            sys.exit(0)
+
+        print(f'Analyzing {len(changed_files)} changed deployment files')
+
+        # Analyze current state (after changes)
+        current_total_cpu = 0
+        current_total_mem = 0
+        current_total_replicas = 0
+        current_resources = []
+
+        # Analyze previous state (before changes)
+        previous_total_cpu = 0
+        previous_total_mem = 0
+        previous_total_replicas = 0
+        previous_resources = []
+
+        for file_path in changed_files:
+            print(f'Analyzing: {file_path}')
+
+            # Current state
+            current_result = parse_manifest_file(file_path)
+            current_total_cpu += current_result['cpu']
+            current_total_mem += current_result['mem']
+            current_total_replicas += current_result['replicas']
+            current_resources.extend(current_result['resources'])
+
+            # Previous state
+            if '${{ github.event_name }}' == 'pull_request':
+                # For PRs, compare with base branch
+                previous_content = get_file_content_at_ref(file_path, 'origin/${{ github.base_ref }}')
+                previous_result = parse_manifest_content(previous_content)
+            else:
+                # For pushes, compare with previous commit
+                previous_content = get_file_content_at_ref(file_path, 'HEAD~1')
+                previous_result = parse_manifest_content(previous_content)
+
+            previous_total_cpu += previous_result['cpu']
+            previous_total_mem += previous_result['mem']
+            previous_total_replicas += previous_result['replicas']
+            previous_resources.extend(previous_result['resources'])
+
+        # Calculate deltas
+        delta_cpu = current_total_cpu - previous_total_cpu
+        delta_mem = current_total_mem - previous_total_mem
+        delta_replicas = current_total_replicas - previous_total_replicas
+
+        print(f'Previous: CPU={previous_total_cpu}m, Memory={previous_total_mem}Mi, Replicas={previous_total_replicas}')
+        print(f'Current:  CPU={current_total_cpu}m, Memory={current_total_mem}Mi, Replicas={current_total_replicas}')
+        print(f'Delta:    CPU={delta_cpu:+d}m, Memory={delta_mem:+d}Mi, Replicas={delta_replicas:+d}')
+
+        # Set outputs
+        print(f'::set-output name=has_changes::true')
+        print(f'::set-output name=previous_cpu::{previous_total_cpu}')
+        print(f'::set-output name=previous_mem::{previous_total_mem}')
+        print(f'::set-output name=previous_replicas::{previous_total_replicas}')
+        print(f'::set-output name=current_cpu::{current_total_cpu}')
+        print(f'::set-output name=current_mem::{current_total_mem}')
+        print(f'::set-output name=current_replicas::{current_total_replicas}')
+        print(f'::set-output name=delta_cpu::{delta_cpu}')
+        print(f'::set-output name=delta_mem::{delta_mem}')
+        print(f'::set-output name=delta_replicas::{delta_replicas}')
+        print(f'::set-output name=changed_files_count::{len(changed_files)}')
+        "
+
+    - name: Run skrooge for previous state
+      id: skrooge-previous
+      if: steps.analyze-changes.outputs.has_changes == 'true'
+      shell: bash
+      run: |
+        OUTPUT=$(skrooge estimate \
+          --replicas ${{ steps.analyze-changes.outputs.previous_replicas }} \
+          --cpu ${{ steps.analyze-changes.outputs.previous_cpu }} \
+          --mem ${{ steps.analyze-changes.outputs.previous_mem }} \
+          --instance ${{ inputs.instance }} \
+          --cost-class ${{ inputs.cost-class }} \
+          --region ${{ inputs.region }} \
+          --format ${{ inputs.format }})
+        echo "output<<EOF" >> $GITHUB_OUTPUT
+        echo "$OUTPUT" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Run skrooge for current state
+      id: skrooge-current
+      if: steps.analyze-changes.outputs.has_changes == 'true'
+      shell: bash
+      run: |
+        OUTPUT=$(skrooge estimate \
+          --replicas ${{ steps.analyze-changes.outputs.current_replicas }} \
+          --cpu ${{ steps.analyze-changes.outputs.current_cpu }} \
+          --mem ${{ steps.analyze-changes.outputs.current_mem }} \
+          --instance ${{ inputs.instance }} \
+          --cost-class ${{ inputs.cost-class }} \
+          --region ${{ inputs.region }} \
+          --format ${{ inputs.format }})
+        echo "output<<EOF" >> $GITHUB_OUTPUT
+        echo "$OUTPUT" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Comment on PR
+      if: github.event_name == 'pull_request' && steps.analyze-changes.outputs.has_changes == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const previousOutput = `${{ steps.skrooge-previous.outputs.output }}`;
+          const currentOutput = `${{ steps.skrooge-current.outputs.output }}`;
+          const changedFiles = `${{ steps.changed-files.outputs.changed_files }}`.split('\n').filter(f => f).length;
+          const deltaCpu = ${{ steps.analyze-changes.outputs.delta_cpu }};
+          const deltaMem = ${{ steps.analyze-changes.outputs.delta_mem }};
+          const deltaReplicas = ${{ steps.analyze-changes.outputs.delta_replicas }};
+
+          let impactEmoji = '📊';
+          if (deltaCpu > 0 || deltaMem > 0 || deltaReplicas > 0) {
+            impactEmoji = '📈';
+          } else if (deltaCpu < 0 || deltaMem < 0 || deltaReplicas < 0) {
+            impactEmoji = '📉';
+          }
+
+          const comment = `${{ inputs.comment-prefix }}
+
+          **${impactEmoji} Changes Detected:**
+          - **Files Modified:** ${changedFiles} deployment manifest(s)
+          - **CPU Change:** ${deltaCpu > 0 ? '+' : ''}${deltaCpu}m (${deltaCpu/1000} cores)
+          - **Memory Change:** ${deltaMem > 0 ? '+' : ''}${deltaMem}Mi (${(deltaMem/1024).toFixed(1)} GiB)
+          - **Replica Change:** ${deltaReplicas > 0 ? '+' : ''}${deltaReplicas}
+
+          **💰 Cost Impact:**
+
+          **Before Changes:**
+          \`\`\`
+          ${previousOutput}
+          \`\`\`
+
+          **After Changes:**
+          \`\`\`
+          ${currentOutput}
+          \`\`\`
+
+          *Generated by [skrooge](https://github.com/mwarkentin/skrooge) - A Kubernetes cost estimator*`;
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+
+    - name: Comment on PR (no changes)
+      if: github.event_name == 'pull_request' && steps.analyze-changes.outputs.has_changes == 'false'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const comment = `${{ inputs.comment-prefix }}
+
+          **📊 Analysis Complete**
+          No deployment manifest changes detected in this PR. No cost impact analysis needed.
+
+          *Generated by [skrooge](https://github.com/mwarkentin/skrooge) - A Kubernetes cost estimator*`;
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
