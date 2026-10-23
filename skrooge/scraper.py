@@ -578,7 +578,7 @@ def _instance_prices(data):
     return flat
 
 
-def diff(old, new, threshold=0.2, max_flagged=100):
+def diff(old, new, threshold=0.2, max_flagged=20):
     "Return a Markdown report of how new instances.json data differs from old"
     old_prices, new_prices = _instance_prices(old), _instance_prices(new)
     lines = ["## Price data changes", ""]
@@ -629,53 +629,74 @@ def diff(old, new, threshold=0.2, max_flagged=100):
         "",
         "Compares prices present in both, by machine type, region and cost class.",
         "",
-        f"| Family | Compared | Changed | Median change | Min | Max | Over ±{threshold:.0%} |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        (
+            "| Family | Cost class | Compared | Changed | Median change | Min | Max "
+            f"| Over ±{threshold:.0%} |"
+        ),
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
-    flagged = []
+    changes = {}
+    for key, old_price in old_prices.items():
+        new_price = new_prices.get(key)
+        if new_price is not None and old_price:
+            changes[key] = (old_price, new_price, new_price / old_price - 1)
+    flagged = {}
     for family in families:
-        ratios = []
-        for key, old_price in old_prices.items():
-            new_price = new_prices.get(key)
-            if key[0] != family or new_price is None or not old_price:
+        compared = False
+        for cost_class in COST_CLASSES:
+            ratios = [
+                change
+                for key, (_, _, change) in changes.items()
+                if key[0] == family and key[3] == cost_class
+            ]
+            if not ratios:
                 continue
-            change = new_price / old_price - 1
-            ratios.append(change)
-            if abs(change) > threshold:
-                flagged.append((key, old_price, new_price, change))
-        if not ratios:
-            lines.append(f"| {family} | 0 | | | | | |")
-            continue
-        changed = sum(1 for r in ratios if abs(r) > 1e-9)
-        over = sum(1 for r in ratios if abs(r) > threshold)
-        lines.append(
-            f"| {family} | {len(ratios)} | {changed} | {statistics.median(ratios):+.1%} "
-            f"| {min(ratios):+.1%} | {max(ratios):+.1%} | {'⚠️ ' if over else ''}{over} |"
-        )
+            compared = True
+            changed = sum(1 for r in ratios if abs(r) > 1e-9)
+            over = sum(1 for r in ratios if abs(r) > threshold)
+            lines.append(
+                f"| {family} | {cost_class} | {len(ratios)} | {changed} "
+                f"| {statistics.median(ratios):+.1%} | {min(ratios):+.1%} "
+                f"| {max(ratios):+.1%} | {'⚠️ ' if over else ''}{over} |"
+            )
+        if not compared:
+            lines.append(f"| {family} | | 0 | | | | | |")
+    for key, (old_price, new_price, change) in changes.items():
+        if abs(change) > threshold:
+            flagged.setdefault(key[3], []).append((key, old_price, new_price, change))
     lines.append("")
 
-    if flagged:
-        flagged.sort(key=lambda item: -abs(item[3]))
+    total = sum(len(items) for items in flagged.values())
+    if total:
         lines += [
-            f"### ⚠️ {len(flagged)} prices changed by more than {threshold:.0%}",
+            f"### ⚠️ {total} prices changed by more than {threshold:.0%}",
             "",
-            "Review these before merging.",
-            "",
-            "| Machine type | Region | Cost class | Old | New | Change |",
-            "| --- | --- | --- | ---: | ---: | ---: |",
+            (
+                f"Review these before merging. Shows up to {max_flagged} of the "
+                "biggest changes for each cost class."
+            ),
         ]
-        for (
-            _,
-            machine_type,
-            region,
-            cost_class,
-        ), old_price, new_price, change in flagged[:max_flagged]:
+    for cost_class in COST_CLASSES:
+        items = sorted(flagged.get(cost_class, []), key=lambda item: -abs(item[3]))
+        if not items:
+            continue
+        lines += [
+            "",
+            f"#### `{cost_class}`: {len(items)}",
+            "",
+            "| Machine type | Region | Old | New | Change |",
+            "| --- | --- | ---: | ---: | ---: |",
+        ]
+        for (_, machine_type, region, _), old_price, new_price, change in items[
+            :max_flagged
+        ]:
             lines.append(
-                f"| {machine_type} | {region} | {cost_class} | {old_price} | {new_price} "
+                f"| {machine_type} | {region} | {old_price} | {new_price} "
                 f"| {change:+.1%} |"
             )
-        if len(flagged) > max_flagged:
-            lines.append(f"\n…and {len(flagged) - max_flagged} more.")
+        if len(items) > max_flagged:
+            lines.append(f"\n…and {len(items) - max_flagged} more.")
+    if total:
         lines.append("")
     return "\n".join(lines)
 

@@ -570,16 +570,39 @@ def test_diff_reports_changes():
     assert "regions added: `us-south1`" in report
     assert "regions removed: `us`" in report
     assert "`cud-1y` prices 0 → 1" in report
-    assert "| n2 | 3 | 3 | +5.0% | +5.0% | +50.0% | ⚠️ 1 |" in report
+    assert "| n2 | ondemand | 2 | 2 | +27.5% | +5.0% | +50.0% | ⚠️ 1 |" in report
+    assert "| n2 | sud | 1 | 1 | +5.0% | +5.0% | +5.0% | 0 |" in report
     assert "### ⚠️ 1 prices changed by more than 20%" in report
-    assert "| n2-standard-2 | europe-west1 | ondemand | 0.1 | 0.15 | +50.0% |" in report
+    assert "#### `ondemand`: 1" in report
+    assert "| n2-standard-2 | europe-west1 | 0.1 | 0.15 | +50.0% |" in report
+
+
+def test_diff_limits_flagged_prices_per_cost_class():
+    old = {"n2": {}}
+    new = {"n2": {}}
+    for size in range(1, 5):
+        old["n2"][f"n2-standard-{size}"] = {
+            "regions": {"us-central1": {"ondemand": 1.0, "preemptible": 1.0}}
+        }
+        new["n2"][f"n2-standard-{size}"] = {
+            "regions": {"us-central1": {"ondemand": 1 + size, "preemptible": 2.0}}
+        }
+    report = scraper.diff(old, new, max_flagged=2)
+    assert "### ⚠️ 8 prices changed by more than 20%" in report
+    assert "#### `ondemand`: 4" in report
+    assert "#### `preemptible`: 4" in report
+    # The biggest changes first
+    ondemand = report.split("#### `ondemand`")[1].split("####")[0]
+    assert "n2-standard-4" in ondemand and "n2-standard-3" in ondemand
+    assert "n2-standard-2" not in ondemand
+    assert report.count("…and 2 more.") == 2
 
 
 def test_diff_without_changes():
     data = {"n2": {"n2-standard-2": {"regions": {"us-central1": {"ondemand": 0.1}}}}}
     report = scraper.diff(data, data)
     assert "No changes." in report
-    assert "| n2 | 1 | 0 | +0.0% | +0.0% | +0.0% | 0 |" in report
+    assert "| n2 | ondemand | 1 | 0 | +0.0% | +0.0% | +0.0% | 0 |" in report
     assert "⚠️" not in report
 
 
