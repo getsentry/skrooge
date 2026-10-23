@@ -6,6 +6,7 @@ from click.testing import CliRunner
 from skrooge import cli as cli_module
 from skrooge import tui, utils
 from skrooge.cli import cli
+from skrooge.render import render
 
 REQUIRED_ARGS = ["--replicas", "30", "--cpu", "2500", "--mem", "2024"]
 
@@ -363,3 +364,8 @@ def test_tui_loads_settings(tmp_path, monkeypatch):
     result = CliRunner().invoke(cli, ["tui", str(path)])
     assert result.exit_code == 0
     assert started[0].settings == tui.Settings("bin-packed", "75")
+
+
+def test_render_rejects_unknown_formats():
+    with pytest.raises(ValueError, match="Unknown format: yaml"):
+        render("yaml", {})

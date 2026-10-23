@@ -6,9 +6,10 @@ import click
 def render(format, data):
     if format == "english":
         render_english(data)
-
-    if format == "json":
+    elif format == "json":
         render_json(data)
+    else:
+        raise ValueError(f"Unknown format: {format}")
 
 
 def render_english(data):
