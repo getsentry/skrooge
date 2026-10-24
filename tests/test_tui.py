@@ -23,26 +23,38 @@ instance_types = json.loads(
 
 def workloads():
     return [
+        # Scaling up
         Workload(
             name="web",
-            replicas="30",
-            cpu="2500",
-            mem="2024",
+            replicas_before="10",
+            cpu_before="2500",
+            mem_before="2024",
+            replicas_after="40",
+            cpu_after="2500",
+            mem_after="2024",
             instance="n2-standard-32",
         ),
+        # A new workload
         Workload(
             name="worker",
-            replicas="12",
-            cpu="4000",
-            mem="16384",
+            replicas_before="0",
+            cpu_before="4000",
+            mem_before="16384",
+            replicas_after="12",
+            cpu_after="4000",
+            mem_after="16384",
             instance="n2-highmem-16",
             cost_class="cud-1y",
         ),
+        # A workload being removed
         Workload(
             name="legacy-api",
-            replicas="20",
-            cpu="-2000",
-            mem="-4096",
+            replicas_before="20",
+            cpu_before="2000",
+            mem_before="4096",
+            replicas_after="0",
+            cpu_after="2000",
+            mem_after="4096",
             instance="n1-standard-16",
         ),
     ]
@@ -64,6 +76,7 @@ def cell(app, row, column):
 
 
 def test_estimate_workload_matches_cli():
+    # 30 more replicas, as with estimate -r 30 -c 2500 -m 2024
     data, error = estimate_workload(instance_types, workloads()[0])
     assert error is None
     assert data["required_instance_count"] == 3
@@ -72,13 +85,39 @@ def test_estimate_workload_matches_cli():
     assert data["costs"]["yearly"] == 32669
 
 
+def test_estimate_workload_works_out_the_change():
+    # 10 replicas at 2 cores and 4 GiB become 20 at 1.5 cores and 3 GiB
+    workload = Workload(
+        replicas_before="10",
+        cpu_before="2000",
+        mem_before="4096",
+        replicas_after="20",
+        cpu_after="1500",
+        mem_after="3072",
+    )
+    data, error = estimate_workload(instance_types, workload)
+    assert error is None
+    # 10 more cores and 20 GiB more memory
+    assert (data["cpu"], data["mem"]) == (10000, 20480)
+    assert data["required_instance_count"] == 1
+
+
+def test_estimate_workload_without_a_change():
+    workload = Workload(replicas_before="10", replicas_after="10")
+    data, error = estimate_workload(instance_types, workload)
+    assert error is None
+    assert data["required_instance_count"] == 0
+    assert data["costs"]["monthly"] == 0
+
+
 @pytest.mark.parametrize(
     ("changes", "error"),
     [
-        ({"replicas": ""}, "Replicas must be a whole number"),
-        ({"replicas": "-1"}, "Replicas must be a whole number"),
-        ({"cpu": "-"}, "CPU change must be a whole number"),
-        ({"mem": "1.5"}, "Memory change must be a whole number"),
+        ({"replicas_after": ""}, "Replicas after must be a whole number, 0 or more."),
+        ({"replicas_before": "-1"}, "Replicas before must be a whole number"),
+        ({"cpu_before": "-"}, "CPU before must be a whole number of milli-cores"),
+        ({"cpu_after": "-500"}, "CPU after must be a whole number of milli-cores"),
+        ({"mem_after": "1.5"}, "Memory after must be a whole number of MiB"),
         ({"instance": " "}, "Enter an instance type"),
         ({"instance": "n2-standard-33"}, "n2-standard-33 not found. Did you mean"),
         (
@@ -97,7 +136,7 @@ def test_estimate_workload_reports_invalid_inputs(changes, error):
 def test_save_and_load_workloads(tmp_path):
     path = tmp_path / "skrooge.json"
     original = workloads()
-    original[0].cpu = "-"  # partial input is kept as typed
+    original[0].cpu_after = "-"  # partial input is kept as typed
     settings = Settings(
         cost_model="bin-packed",
         cpu_packing_efficiency="80",
@@ -111,9 +150,12 @@ def test_save_and_load_workloads(tmp_path):
     assert saved["mem_packing_efficiency"] == 60
     assert saved["workloads"][0] == {
         "name": "web",
-        "replicas": 30,
-        "cpu": "-",
-        "mem": 2024,
+        "replicas_before": 10,
+        "cpu_before": 2500,
+        "mem_before": 2024,
+        "replicas_after": 40,
+        "cpu_after": "-",
+        "mem_after": 2024,
         "instance": "n2-standard-32",
         "region": "us-central1",
         "cost_class": "sud",
@@ -156,6 +198,10 @@ async def test_mount_shows_estimates_without_changing_workloads(tmp_path):
         assert app.workloads == workloads()
         assert not app.dirty
         assert app.query_one("#region").value == "us-central1"
+        assert cell(app, 0, "replicas") == "10 → 40"
+        assert cell(app, 0, "cpu") == "2500"
+        summary = str(app.query_one("#summary").render())
+        assert "Total change: +75 cores, +59.3 GiB (CPU-bound)" in summary
         assert cell(app, 0, "nodes") == "3"
         assert cell(app, 0, "monthly") == "$2,722"
         # Scaling down is a saving
@@ -169,12 +215,13 @@ async def test_mount_shows_estimates_without_changing_workloads(tmp_path):
 async def test_editing_inputs_updates_estimate_live(tmp_path):
     app = SkroogeApp(workloads(), tmp_path / "skrooge.json", instance_types)
     async with app.run_test(size=(140, 40)) as pilot:
-        app.query_one("#replicas").focus()
-        await pilot.press("ctrl+u", "6", "0")
+        app.query_one("#replicas_after").focus()
+        await pilot.press("ctrl+u", "7", "0")
         await pilot.pause()
-        assert app.workloads[0].replicas == "60"
+        assert app.workloads[0].replicas_after == "70"
         assert app.dirty
-        # 60 * 2500m = 150 cores = 5 n2-standard-32 nodes
+        assert cell(app, 0, "replicas") == "10 → 70"
+        # 60 more replicas at 2500m is 150 cores, or 5 n2-standard-32 nodes
         assert cell(app, 0, "nodes") == "5"
 
         await pilot.press("ctrl+u")
@@ -341,7 +388,15 @@ async def test_packing_efficiency_scales_bin_packed_costs(tmp_path):
 @app_test
 async def test_bin_packing_nets_each_resource_separately(tmp_path):
     # More CPU but less memory per replica, as when right-sizing requests
-    rightsize = Workload(name="rightsize", replicas="50", cpu="500", mem="-1024")
+    rightsize = Workload(
+        name="rightsize",
+        replicas_before="50",
+        cpu_before="1000",
+        mem_before="2048",
+        replicas_after="50",
+        cpu_after="1500",
+        mem_after="1024",
+    )
     app = bin_packed([rightsize], tmp_path)
     async with app.run_test(size=(140, 40)) as pilot:
         await pilot.pause()
@@ -356,7 +411,14 @@ async def test_bin_packing_nets_each_resource_separately(tmp_path):
 @app_test
 async def test_workloads_that_cant_be_bin_packed_are_left_out(tmp_path):
     c2 = Workload(
-        name="c2", replicas="30", cpu="2500", mem="2024", instance="c2-standard-30"
+        name="c2",
+        replicas_before="0",
+        cpu_before="2500",
+        mem_before="2024",
+        replicas_after="30",
+        cpu_after="2500",
+        mem_after="2024",
+        instance="c2-standard-30",
     )
     app = bin_packed([*workloads(), c2], tmp_path)
     async with app.run_test(size=(140, 40)) as pilot:

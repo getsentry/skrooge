@@ -96,7 +96,7 @@ Bin-packed estimates use GCP's per-vCPU and per-GiB prices for each machine fami
 | `ctrl+s` | Save the workloads and settings |
 | `ctrl+q` | Quit, leaving a summary table in your terminal |
 
-Use `tab` to move between fields, and the arrow keys in the workloads table to pick which workload you're editing. CPU and memory are per-replica changes, as with `estimate`. A negative change to the resource a workload is bound by is a scale-down, which counts as a saving in the totals.
+Use `tab` to move between fields, and the arrow keys in the workloads table to pick which workload you're editing. For each workload, enter its replicas and per-replica CPU and memory as they are before the change and after it, and skrooge works out the change: 10 replicas at 2,000m becoming 20 at 1,500m is 10 more cores. Use 0 replicas before for a new workload, or 0 after for one you're removing. A change that shrinks the resource a workload is bound by is a saving in the totals.
 
 The settings above the workloads table choose the cost model and the CPU and memory packing efficiencies, which apply to every workload. The estimate panel always shows the selected workload under both models. Bin-packed costs treat each resource separately, so a workload that requests more CPU but less memory nets the two out. With whole nodes it would pay for the CPU's extra nodes.
 
@@ -104,15 +104,26 @@ Workloads are loaded from and saved to `skrooge.json` in the current directory; 
 
     uvx skrooge tui capacity-plan.json
 
-The file looks like this. `cost_model` (`whole-nodes` or `bin-packed`), `cpu_packing_efficiency`, `mem_packing_efficiency`, and each workload's `region` and `cost_class` are optional, and default to `whole-nodes`, `100`, `100`, `us-central1`, and `sud`:
+The file looks like this, with CPU in milli-cores and memory in MiB per replica. `cost_model` (`whole-nodes` or `bin-packed`), `cpu_packing_efficiency`, `mem_packing_efficiency`, and each workload's `region` and `cost_class` are optional, and default to `whole-nodes`, `100`, `100`, `us-central1`, and `sud`:
 
     {
       "cost_model": "bin-packed",
       "cpu_packing_efficiency": 85,
       "mem_packing_efficiency": 55,
       "workloads": [
-        {"name": "web", "replicas": 30, "cpu": 2500, "mem": 2024, "instance": "n2-standard-32"},
-        {"name": "worker", "replicas": 12, "cpu": 4000, "mem": 16384, "instance": "n2-highmem-16", "cost_class": "cud-1y"}
+        {
+          "name": "web",
+          "replicas_before": 10, "cpu_before": 2500, "mem_before": 2024,
+          "replicas_after": 40, "cpu_after": 2500, "mem_after": 2024,
+          "instance": "n2-standard-32"
+        },
+        {
+          "name": "worker",
+          "replicas_before": 0, "cpu_before": 4000, "mem_before": 16384,
+          "replicas_after": 12, "cpu_after": 4000, "mem_after": 16384,
+          "instance": "n2-highmem-16",
+          "cost_class": "cud-1y"
+        }
       ]
     }
 

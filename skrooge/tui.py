@@ -27,7 +27,14 @@ from .utils import (
     resource_prices,
 )
 
-NUMERIC_FIELDS = ("replicas", "cpu", "mem")
+# A workload's replicas and per-replica CPU and memory, before and after its
+# change, as Workload fields such as cpu_before, and the error when one is invalid
+SIZES = {
+    "replicas": ("Replicas", "a whole number"),
+    "cpu": ("CPU", "a whole number of milli-cores"),
+    "mem": ("Memory", "a whole number of MiB"),
+}
+NUMERIC_FIELDS = [f"{size}_{when}" for when in ("before", "after") for size in SIZES]
 
 COST_MODELS = {"whole-nodes": "whole nodes", "bin-packed": "bin-packed"}
 
@@ -76,11 +83,15 @@ def to_dict(instance, numeric_fields):
 @dataclass
 class Workload:
     # Numeric fields hold the text as typed so partial input survives switching
-    # between workloads; estimate_workload() parses and validates them.
+    # between workloads; estimate_workload() parses and validates them. A new
+    # workload has no replicas before, and a removed one none after.
     name: str = "workload-1"
-    replicas: str = "10"
-    cpu: str = "1000"
-    mem: str = "2048"
+    replicas_before: str = "0"
+    cpu_before: str = "1000"
+    mem_before: str = "2048"
+    replicas_after: str = "10"
+    cpu_after: str = "1000"
+    mem_after: str = "2048"
     instance: str = "n2-standard-32"
     region: str = "us-central1"
     cost_class: str = "sud"
@@ -156,27 +167,44 @@ def parse_int(value):
         return None
 
 
+def workload_sizes(workload):
+    "Returns (sizes, error), where sizes are the workload's numeric fields as numbers"
+    sizes = {}
+    for field in NUMERIC_FIELDS:
+        value = parse_int(getattr(workload, field))
+        if value is None or value < 0:
+            size, when = field.split("_")
+            label, kind = SIZES[size]
+            return None, f"{label} {when} must be {kind}, 0 or more."
+        sizes[field] = value
+    return sizes, None
+
+
+def requests(sizes, when):
+    "The total CPU and memory a workload requests before or after its change"
+    replicas = sizes[f"replicas_{when}"]
+    return replicas * sizes[f"cpu_{when}"], replicas * sizes[f"mem_{when}"]
+
+
 def estimate_workload(instance_types, workload, packing_efficiency=None):
     "Returns (data, error), exactly one of which is None"
-    replicas = parse_int(workload.replicas)
-    if replicas is None or replicas < 0:
-        return None, "Replicas must be a whole number, 0 or more."
-    cpu = parse_int(workload.cpu)
-    if cpu is None:
-        return None, "CPU change must be a whole number of milli-cores."
-    mem = parse_int(workload.mem)
-    if mem is None:
-        return None, "Memory change must be a whole number of MiB."
+    sizes, error = workload_sizes(workload)
+    if error:
+        return None, error
     instance = workload.instance.strip().lower()
     if not instance:
         return None, "Enter an instance type."
+    cpu_before, mem_before = requests(sizes, "before")
+    cpu_after, mem_after = requests(sizes, "after")
     try:
+        # calculate_estimate() takes a change per replica, so give it the whole
+        # change as one replica's
         data = calculate_estimate(
             instance_types,
             instance,
-            replicas,
-            cpu,
-            mem,
+            1,
+            cpu_after - cpu_before,
+            mem_after - mem_before,
             cost_class=workload.cost_class,
             region=workload.region,
             packing_efficiency=packing_efficiency,
@@ -261,12 +289,32 @@ def model_label(cost_model, packing_efficiency):
     return f"bin-packed at {cores}% CPU, {memory}% memory"
 
 
+def change_text(workload, size):
+    "A size before and after the change as typed, or just once if it's the same"
+    before = getattr(workload, f"{size}_before")
+    after = getattr(workload, f"{size}_after")
+    return after if before == after else f"{before} → {after}"
+
+
+def signed(amount):
+    return f"+{quantity(amount)}" if amount > 0 else quantity(amount)
+
+
+def change_summary(data):
+    "The workload's total change in CPU and memory"
+    if data["cpu"] == 0 and data["mem"] == 0:
+        return "No change in CPU or memory"
+    bound = "CPU" if data["constrained_resource"] == "cores" else "memory"
+    return (
+        f"Total change: {signed(data['cpu'] / 1000)} cores, "
+        f"{signed(data['mem'] / 1024)} GiB ({bound}-bound)"
+    )
+
+
 def row_cells(workload, error, costs):
     cells = [
         workload.name or "(unnamed)",
-        workload.replicas,
-        workload.cpu,
-        workload.mem,
+        *(change_text(workload, size) for size in SIZES),
         workload.instance,
         workload.region,
         workload.cost_class,
@@ -360,6 +408,12 @@ class SkroogeApp(App):
     .field Input, .field Select {
         width: 1fr;
     }
+    .field .column {
+        width: 1fr;
+    }
+    .field .arrow {
+        width: 3;
+    }
     .hint {
         margin-top: 1;
         color: $text-muted;
@@ -424,24 +478,35 @@ class SkroogeApp(App):
         with Horizontal(id="top"):
             with Vertical(id="inputs"):
                 yield labelled("Name", Input(first.name, id="name", compact=True))
-                yield labelled(
-                    "Replicas",
-                    Input(
-                        first.replicas,
-                        id="replicas",
-                        type="integer",
-                        validators=[Integer(minimum=0)],
-                        compact=True,
-                    ),
+                yield Horizontal(
+                    Label(""),
+                    Label("Before", classes="column"),
+                    Label("", classes="arrow"),
+                    Label("After", classes="column"),
+                    classes="field",
                 )
-                yield labelled(
-                    "CPU Δ (m)",
-                    Input(first.cpu, id="cpu", type="integer", compact=True),
-                )
-                yield labelled(
-                    "Memory Δ (MiB)",
-                    Input(first.mem, id="mem", type="integer", compact=True),
-                )
+                for size, label in (
+                    ("replicas", "Replicas"),
+                    ("cpu", "CPU (m)"),
+                    ("mem", "Memory (MiB)"),
+                ):
+                    before, after = (
+                        Input(
+                            getattr(first, f"{size}_{when}"),
+                            id=f"{size}_{when}",
+                            type="integer",
+                            validators=[Integer(minimum=0)],
+                            compact=True,
+                        )
+                        for when in ("before", "after")
+                    )
+                    yield Horizontal(
+                        Label(label),
+                        before,
+                        Label(" → ", classes="arrow"),
+                        after,
+                        classes="field",
+                    )
                 yield labelled(
                     "Instance type",
                     Input(
@@ -477,11 +542,7 @@ class SkroogeApp(App):
                         compact=True,
                     ),
                 )
-                yield Static(
-                    "CPU and memory are per replica. Negative values scale "
-                    "down (savings).",
-                    classes="hint",
-                )
+                yield Static("CPU and memory are per replica.", classes="hint")
             with Vertical(id="estimate"):
                 yield Static(id="summary")
                 yield DataTable(id="tiers", cursor_type="none")
@@ -571,9 +632,7 @@ class SkroogeApp(App):
             summary = Text.assemble(
                 (data["instance"], "bold"),
                 f": {specs['cores']} cores, {specs['memory']} GiB per node\n",
-                f"Needs {quantity(data['delta_cpu'] / 1000)} cores and "
-                f"{quantity(data['delta_mem'] / 1024)} GiB in total "
-                f"({'CPU' if data['constrained_resource'] == 'cores' else 'memory'}-bound)",
+                change_summary(data),
             )
             for model in COST_MODELS:
                 summary.append("\n")
@@ -664,7 +723,7 @@ class SkroogeApp(App):
     def select(self, index):
         self.selected = index
         workload = self.workloads[index]
-        for name in ("name", "replicas", "cpu", "mem", "instance"):
+        for name in ("name", *NUMERIC_FIELDS, "instance"):
             self.query_one(f"#{name}", Input).value = getattr(workload, name)
         self.query_one("#region", Select).value = workload.region
         self.query_one("#cost_class", Select).value = workload.cost_class

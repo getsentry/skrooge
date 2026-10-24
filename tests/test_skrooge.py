@@ -341,9 +341,12 @@ def test_tui_loads_workloads_and_prints_summary(instance_data, tmp_path, monkeyp
                 "workloads": [
                     {
                         "name": "web",
-                        "replicas": 30,
-                        "cpu": 2500,
-                        "mem": 2024,
+                        "replicas_before": 10,
+                        "replicas_after": 40,
+                        "cpu_before": 2500,
+                        "cpu_after": 2500,
+                        "mem_before": 2024,
+                        "mem_after": 2024,
                         "instance": "n2-standard-32",
                     }
                 ]
