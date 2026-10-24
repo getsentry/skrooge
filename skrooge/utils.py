@@ -48,16 +48,24 @@ def load_instance_types():
     )
 
 
-def available_regions():
+def available_regions(cost_class=None, instance_data=None):
+    "Regions with pricing, optionally only in one cost class or for one instance type"
+    if instance_data is None:
+        all_instance_data = [
+            data
+            for family in load_instance_types().values()
+            for data in family.values()
+            if data
+        ]
+    else:
+        all_instance_data = [instance_data]
     # Skip aggregate pricing keys such as "us" or "asia-east"; GCP regions end in a digit
     return sorted(
         {
             region
-            for family in load_instance_types().values()
-            for instance_data in family.values()
-            if instance_data
-            for region in instance_data.get("regions", {})
-            if region[-1].isdigit()
+            for data in all_instance_data
+            for region, prices in data.get("regions", {}).items()
+            if region[-1].isdigit() and (cost_class is None or cost_class in prices)
         },
         # Natural sort, so europe-west2 comes before europe-west10
         key=lambda region: [
@@ -104,11 +112,7 @@ def check_pricing(instance_data, instance, cost_class, region):
     prices = instance_data["regions"].get(region, {})
     if cost_class in prices:
         return
-    regions_with_pricing = [
-        r
-        for r, p in instance_data["regions"].items()
-        if cost_class in p and r[-1].isdigit()
-    ]
+    regions_with_pricing = available_regions(cost_class, instance_data)
     suggestions = []
     if prices:
         suggestions.append(
@@ -118,6 +122,10 @@ def check_pricing(instance_data, instance, cost_class, region):
     if close_matches:
         suggestions.append(
             f"Similar regions with {cost_class} pricing for {instance}: {', '.join(close_matches)}"
+        )
+    if regions_with_pricing:
+        suggestions.append(
+            f"List them all with: skrooge regions --instance {instance} --cost-class {cost_class}"
         )
     raise PricingNotFoundError(
         "\n".join(

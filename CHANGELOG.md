@@ -13,9 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bin-packed estimates, which charge a workload for just the CPU and memory it requests at per-vCPU and per-GiB prices, for large shared clusters. `estimate` prints one alongside the whole-node estimate (and adds `packing_efficiency`, `resource_prices`, and `resource_costs` to `--format json`), and the TUI can switch between the two
 - `--packing-efficiency` (`-p`), and a matching TUI setting, to account for how full a cluster's nodes are in bin-packed estimates
 - `c4d`, `n4d` and `n4a` machine types, once `instances.json` is next regenerated
+- `regions` command, which lists the regions skrooge has pricing for, optionally only for an `--instance` type and `--cost-class`. When an instance type has no pricing in the chosen region and cost class, `estimate` suggests the matching `regions` command.
+- The README's usage section includes the `--help` output for every command, generated with cog and checked in CI
 
 ### Changed
 
+- `estimate --help` no longer lists every `--region` choice; use `skrooge regions` instead
+- An invalid `--region` suggests similar regions instead of listing all of them
+- Requires Click 8.2 or newer
 - The price scraper now reads prices from GCP's Cloud Billing Catalog API, as the pricing calculator price list it used is gone. A daily workflow opens a pull request when prices change, with a report of what changed.
 
 ## [1.1.0] - 2026-10-22

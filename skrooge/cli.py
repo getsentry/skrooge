@@ -1,3 +1,4 @@
+import difflib
 import logging
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from .utils import (
     EstimateError,
     available_regions,
     calculate_estimate,
+    find_instance_data,
     load_instance_types,
 )
 
@@ -17,6 +19,17 @@ logger = logging.getLogger(__name__)
 # Configure the package logger so --verbosity also covers skrooge.utils
 package_logger = logging.getLogger("skrooge")
 click_log.basic_config(package_logger)
+
+
+class RegionChoice(click.Choice):
+    "A choice of region whose error suggests similar regions instead of listing them all"
+
+    def get_invalid_choice_message(self, value, ctx):
+        close_matches = difflib.get_close_matches(str(value).lower(), self.choices)
+        suggestion = (
+            f" Did you mean: {', '.join(close_matches)}" if close_matches else ""
+        )
+        return f"{value!r} isn't a region skrooge has pricing for.{suggestion}\nList them with: skrooge regions"
 
 
 @click.group()
@@ -62,8 +75,10 @@ def cli():
 )
 @click.option(
     "--region",
-    help="The region to use for cost calculation. Default: us-central1",
-    type=click.Choice(available_regions(), case_sensitive=False),
+    help="The region to use for cost calculation. Default: us-central1. List them with: skrooge regions",
+    type=RegionChoice(available_regions(), case_sensitive=False),
+    # The choices are long, so leave them out of --help
+    metavar="REGION",
     default="us-central1",
 )
 @click.option(
@@ -107,6 +122,33 @@ def estimate(
         raise click.BadParameter(str(e)) from None
 
     render(format=format, data=data)
+
+
+@cli.command(name="regions")
+@click.option(
+    "-i",
+    "--instance",
+    help="Only list regions with pricing for this instance type",
+)
+@click.option(
+    "--cost-class",
+    help="Only list regions with pricing in this cost class",
+    type=click.Choice(COST_CLASSES, case_sensitive=False),
+)
+def regions(instance, cost_class):
+    "List the regions skrooge has pricing for"
+    try:
+        instance_data = (
+            find_instance_data(load_instance_types(), instance) if instance else None
+        )
+    except EstimateError as e:
+        raise click.BadParameter(str(e)) from None
+    matching_regions = available_regions(cost_class, instance_data)
+    if not matching_regions:
+        raise click.ClickException(
+            f"No region has {cost_class or 'any'} pricing for {instance or 'any instance type'}."
+        )
+    click.echo("\n".join(matching_regions))
 
 
 @cli.command(name="tui")
