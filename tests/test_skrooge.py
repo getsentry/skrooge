@@ -395,8 +395,24 @@ def test_bin_packed_estimate_in_json(instance_data):
     result = CliRunner().invoke(cli, [*WEB_ARGS, "--format", "json"])
     assert result.exit_code == 0
     data = json.loads(result.output)
-    assert data["packing_efficiency"] == 100
+    assert data["packing_efficiency"] == {"cores": 100, "memory": 100}
     assert data["resource_costs"]["total"]["monthly"] == 1532
+
+
+def test_packing_efficiency_by_resource(instance_data):
+    # -p sets both, and the per-resource options override it
+    result = CliRunner().invoke(
+        cli, [*WEB_ARGS, "-p", "80", "--mem-packing-efficiency", "50", "-f", "json"]
+    )
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["packing_efficiency"] == {"cores": 80, "memory": 50}
+    # $1,385 / 0.8 and $147 / 0.5
+    assert data["resource_costs"]["cores"]["monthly"] == 1731
+    assert data["resource_costs"]["memory"]["monthly"] == 293
+
+    result = CliRunner().invoke(cli, [*WEB_ARGS, "--cpu-packing-efficiency", "85"])
+    assert "in a cluster at 85% CPU and 100% memory efficiency" in result.output
 
 
 def test_no_bin_packed_estimate_when_pricing_cant_be_split(instance_data):
@@ -419,14 +435,21 @@ def test_packing_efficiency_must_be_a_percentage():
 def test_tui_loads_settings(tmp_path, monkeypatch):
     path = tmp_path / "skrooge.json"
     path.write_text(
-        '{"cost_model": "bin-packed", "packing_efficiency": 75, "workloads": []}'
+        json.dumps(
+            {
+                "cost_model": "bin-packed",
+                "cpu_packing_efficiency": 75,
+                "mem_packing_efficiency": 60,
+                "workloads": [],
+            }
+        )
     )
     started = []
     monkeypatch.setattr(tui.SkroogeApp, "run", lambda app: started.append(app))
 
     result = CliRunner().invoke(cli, ["tui", str(path)])
     assert result.exit_code == 0
-    assert started[0].settings == tui.Settings("bin-packed", "75")
+    assert started[0].settings == tui.Settings("bin-packed", "75", "60")
 
 
 def test_render_rejects_unknown_formats():

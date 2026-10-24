@@ -23,7 +23,7 @@ def estimate_data():
             "class": "cud-1y",
             "region": "us-central1",
         },
-        "packing_efficiency": 80,
+        "packing_efficiency": {"cores": 80, "memory": 80},
         "resource_costs": {
             "cores": {"hourly": 0.06, "monthly": 46, "yearly": 548},
             "memory": {"hourly": 0.01, "monthly": 4, "yearly": 44},
@@ -60,6 +60,17 @@ def test_render_english(estimate_data, renderer, capsys):
             "$0.07/h (or $50/m (or $592/y)): $46/m for cores and $4/m for memory."
         ),
     ]
+
+
+def test_render_english_with_packing_efficiency_by_resource(estimate_data, capsys):
+    estimate_data["packing_efficiency"] = {"cores": 85, "memory": 55}
+
+    render_english(estimate_data)
+
+    last_line = capsys.readouterr().out.splitlines()[-1]
+    assert last_line.startswith(
+        "Bin-packed in a cluster at 85% CPU and 55% memory efficiency, this workload"
+    )
 
 
 def test_render_english_without_bin_packed_estimate(estimate_data, capsys):

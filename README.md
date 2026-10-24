@@ -74,6 +74,12 @@ No cluster packs perfectly, so `--packing-efficiency` (`-p`) sets the percentage
     ...
     Bin-packed in a cluster at 80% efficiency, this workload will cost $224.83/h (or $164126/m (or $1969511/y)): $134072/m for cores and $30054/m for memory.
 
+A cluster usually runs short of one resource while the other sits partly idle, say with 85% of its CPU requested but only 55% of its memory. `--cpu-packing-efficiency` and `--mem-packing-efficiency` set each one separately, overriding `--packing-efficiency`:
+
+    $ uvx skrooge estimate --replicas 1000 --cpu 5810 --mem 9950 --instance n2-highcpu-64 --cpu-packing-efficiency 85 --mem-packing-efficiency 55
+    ...
+    Bin-packed in a cluster at 85% CPU and 55% memory efficiency, this workload will cost $232.74/h (or $169900/m (or $2038804/y)): $126185/m for cores and $43715/m for memory.
+
 Bin-packed estimates use GCP's per-vCPU and per-GiB prices for each machine family. GPU machine types (`a2`, `g2`) also pay for their GPUs, and shared-core types (`f1-micro`, `g1-small`, `e2-micro`, `e2-small`, `e2-medium`) for a fraction of a vCPU, so those only get whole-node estimates.
 
 ### Interactive mode
@@ -92,17 +98,18 @@ Bin-packed estimates use GCP's per-vCPU and per-GiB prices for each machine fami
 
 Use `tab` to move between fields, and the arrow keys in the workloads table to pick which workload you're editing. CPU and memory are per-replica changes, as with `estimate`. A negative change to the resource a workload is bound by is a scale-down, which counts as a saving in the totals.
 
-The settings above the workloads table choose the cost model and the packing efficiency, which apply to every workload. The estimate panel always shows the selected workload under both models. Bin-packed costs treat each resource separately, so a workload that requests more CPU but less memory nets the two out. With whole nodes it would pay for the CPU's extra nodes.
+The settings above the workloads table choose the cost model and the CPU and memory packing efficiencies, which apply to every workload. The estimate panel always shows the selected workload under both models. Bin-packed costs treat each resource separately, so a workload that requests more CPU but less memory nets the two out. With whole nodes it would pay for the CPU's extra nodes.
 
 Workloads are loaded from and saved to `skrooge.json` in the current directory; pass a path to use another file:
 
     uvx skrooge tui capacity-plan.json
 
-The file looks like this. `cost_model` (`whole-nodes` or `bin-packed`), `packing_efficiency`, and each workload's `region` and `cost_class` are optional, and default to `whole-nodes`, `100`, `us-central1`, and `sud`:
+The file looks like this. `cost_model` (`whole-nodes` or `bin-packed`), `cpu_packing_efficiency`, `mem_packing_efficiency`, and each workload's `region` and `cost_class` are optional, and default to `whole-nodes`, `100`, `100`, `us-central1`, and `sud`:
 
     {
       "cost_model": "bin-packed",
-      "packing_efficiency": 80,
+      "cpu_packing_efficiency": 85,
+      "mem_packing_efficiency": 55,
       "workloads": [
         {"name": "web", "replicas": 30, "cpu": 2500, "mem": 2024, "instance": "n2-standard-32"},
         {"name": "worker", "replicas": 12, "cpu": 4000, "mem": 16384, "instance": "n2-highmem-16", "cost_class": "cud-1y"}
@@ -171,6 +178,12 @@ Options:
                                   of the cluster's CPU and memory that pods
                                   request on average. Default: 100
                                   [1<=x<=100]
+  --cpu-packing-efficiency INTEGER RANGE
+                                  Like --packing-efficiency, for CPU only.
+                                  Default: --packing-efficiency  [1<=x<=100]
+  --mem-packing-efficiency INTEGER RANGE
+                                  Like --packing-efficiency, for memory only.
+                                  Default: --packing-efficiency  [1<=x<=100]
   -f, --format [english|json]     The output format. Default: english
   --help                          Show this message and exit.
 ```

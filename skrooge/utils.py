@@ -265,11 +265,14 @@ def resource_prices(instance_types, instance, cost_class, region):
 
 def calculate_resource_cost(prices, delta_cpu, delta_mem, packing_efficiency):
     """The cost of just the CPU and memory a workload requests, in a cluster whose
-    nodes have packing_efficiency percent of their resources requested on average"""
-    overhead = 100 / packing_efficiency
+    nodes have packing_efficiency["cores"] percent of their vCPUs and
+    packing_efficiency["memory"] percent of their memory requested on average"""
+    requested = {"cores": delta_cpu / 1000, "memory": delta_mem / 1024}
     costs = {
-        "cores": period_costs(delta_cpu / 1000 * prices["cores"] * overhead),
-        "memory": period_costs(delta_mem / 1024 * prices["memory"] * overhead),
+        resource: period_costs(
+            amount * prices[resource] * (100 / packing_efficiency[resource])
+        )
+        for resource, amount in requested.items()
     }
     # Sum the rounded parts so the breakdown adds up to the total
     costs["total"] = {
@@ -287,8 +290,14 @@ def calculate_estimate(
     mem,
     cost_class,
     region,
-    packing_efficiency=100,
+    packing_efficiency=None,
 ):
+    """Estimate a change of cpu milli-cores and mem MiB in each of replicas
+
+    packing_efficiency is the percentage of the cluster's vCPUs and memory that
+    pods request, as {"cores": ..., "memory": ...}; 100 for both by default.
+    """
+    packing_efficiency = packing_efficiency or {"cores": 100, "memory": 100}
     instance_data = find_instance_data(instance_types, instance)
     if not all(
         isinstance(instance_data["specs"][resource], (int, float))

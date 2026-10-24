@@ -98,12 +98,17 @@ def test_save_and_load_workloads(tmp_path):
     path = tmp_path / "skrooge.json"
     original = workloads()
     original[0].cpu = "-"  # partial input is kept as typed
-    settings = Settings(cost_model="bin-packed", packing_efficiency="80")
+    settings = Settings(
+        cost_model="bin-packed",
+        cpu_packing_efficiency="80",
+        mem_packing_efficiency="60",
+    )
     save_workloads(path, original, settings)
 
     saved = json.loads(path.read_text())
     assert saved["cost_model"] == "bin-packed"
-    assert saved["packing_efficiency"] == 80
+    assert saved["cpu_packing_efficiency"] == 80
+    assert saved["mem_packing_efficiency"] == 60
     assert saved["workloads"][0] == {
         "name": "web",
         "replicas": 30,
@@ -267,12 +272,12 @@ async def test_quit_warns_about_unsaved_changes(tmp_path):
     assert app.return_code == 0
 
 
-def bin_packed(app_workloads, tmp_path, efficiency="100"):
+def bin_packed(app_workloads, tmp_path):
     return SkroogeApp(
         app_workloads,
         tmp_path / "skrooge.json",
         instance_types,
-        Settings(cost_model="bin-packed", packing_efficiency=efficiency),
+        Settings(cost_model="bin-packed"),
     )
 
 
@@ -305,19 +310,31 @@ async def test_toggling_cost_model_updates_table_and_total(tmp_path):
 async def test_packing_efficiency_scales_bin_packed_costs(tmp_path):
     app = bin_packed(workloads(), tmp_path)
     async with app.run_test(size=(140, 40)) as pilot:
-        app.query_one("#packing_efficiency").focus()
+        app.query_one("#cpu_packing_efficiency").focus()
+        await pilot.press("ctrl+u", "8", "0")
+        app.query_one("#mem_packing_efficiency").focus()
         await pilot.press("ctrl+u", "8", "0")
         await pilot.pause()
-        assert app.settings.packing_efficiency == "80"
+        assert app.settings.cpu_packing_efficiency == "80"
+        assert app.settings.mem_packing_efficiency == "80"
         # $1,385 / 0.8 + $147 / 0.8
         assert cell(app, 0, "monthly") == "$1,914"
-        assert "bin-packed at 80%" in total(app)
+        assert "bin-packed at 80% across" in total(app)
+
+        # A cluster is usually short of one resource and has the other to spare
+        await pilot.press("ctrl+u", "5", "0")
+        await pilot.pause()
+        # $1,385 / 0.8 + $147 / 0.5
+        assert cell(app, 0, "monthly") == "$2,024"
+        assert "bin-packed at 80% CPU, 50% memory across" in total(app)
+        summary = str(app.query_one("#summary").render())
+        assert "▶ Bin-packed at 80% CPU, 50% memory: " in summary
 
         await pilot.press("ctrl+u")
         await pilot.pause()
         assert cell(app, 0, "nodes") == "n/a"
-        assert "Packing efficiency must be a whole number from 1 to 100" in total(app)
-        # Whole-node estimates don't depend on it
+        assert "Packing efficiencies must be whole numbers from 1 to 100" in total(app)
+        # Whole-node estimates don't depend on them
         assert app.results[0][1] is None
 
 

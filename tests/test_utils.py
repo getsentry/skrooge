@@ -448,7 +448,7 @@ def test_instance_names_skip_keys_that_arent_families():
     assert "n2" not in names
 
 
-def web_estimate(packing_efficiency=100):
+def web_estimate(packing_efficiency=None):
     return calculate_estimate(
         INSTANCE_TYPES,
         "n2-standard-32",
@@ -527,7 +527,7 @@ def test_resource_prices_reject_recorded_prices_that_dont_add_up():
 
 def test_calculate_estimate_resource_costs():
     data = web_estimate()
-    assert data["packing_efficiency"] == 100
+    assert data["packing_efficiency"] == {"cores": 100, "memory": 100}
     # 75 cores and 59.3 GiB
     assert data["resource_costs"] == {
         "cores": {"hourly": 1.9, "monthly": 1385, "yearly": 16615},
@@ -537,11 +537,24 @@ def test_calculate_estimate_resource_costs():
 
 
 def test_packing_efficiency_scales_resource_costs():
-    full, half = web_estimate()["resource_costs"], web_estimate(50)["resource_costs"]
+    half_packed = web_estimate({"cores": 50, "memory": 50})
+    full, half = web_estimate()["resource_costs"], half_packed["resource_costs"]
     for part in ("cores", "memory", "total"):
         assert half[part]["monthly"] == pytest.approx(2 * full[part]["monthly"], abs=2)
     # Whole nodes are already paid for in full
-    assert web_estimate(50)["costs"] == web_estimate()["costs"]
+    assert half_packed["costs"] == web_estimate()["costs"]
+
+
+def test_packing_efficiency_scales_each_resource_separately():
+    full = web_estimate()["resource_costs"]
+    costs = web_estimate({"cores": 50, "memory": 100})["resource_costs"]
+    assert costs["cores"]["monthly"] == pytest.approx(
+        2 * full["cores"]["monthly"], abs=1
+    )
+    assert costs["memory"] == full["memory"]
+    assert costs["total"]["monthly"] == (
+        costs["cores"]["monthly"] + costs["memory"]["monthly"]
+    )
 
 
 def test_calculate_estimate_without_resource_prices():

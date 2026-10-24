@@ -31,6 +31,12 @@ NUMERIC_FIELDS = ("replicas", "cpu", "mem")
 
 COST_MODELS = {"whole-nodes": "whole nodes", "bin-packed": "bin-packed"}
 
+# The Settings field with each resource's packing efficiency
+PACKING_EFFICIENCY_FIELDS = {
+    "cores": "cpu_packing_efficiency",
+    "memory": "mem_packing_efficiency",
+}
+
 COLUMNS = [
     ("name", "Workload"),
     ("replicas", "Replicas"),
@@ -99,7 +105,8 @@ class Workload:
 class Settings:
     # Properties of the cluster, so shared by every workload
     cost_model: str = "whole-nodes"
-    packing_efficiency: str = "100"
+    cpu_packing_efficiency: str = "100"
+    mem_packing_efficiency: str = "100"
 
     @classmethod
     def from_dict(cls, data):
@@ -109,12 +116,20 @@ class Settings:
         return settings
 
     def to_dict(self):
-        return to_dict(self, ["packing_efficiency"])
+        return to_dict(self, PACKING_EFFICIENCY_FIELDS.values())
 
-    def efficiency(self):
-        "The packing efficiency as a percentage, or None if it isn't valid"
-        efficiency = parse_int(self.packing_efficiency)
-        return efficiency if efficiency is not None and 1 <= efficiency <= 100 else None
+    def packing_efficiency(self):
+        """The percentage of the cluster's vCPUs and memory that pods request, by
+        resource, or None if either isn't valid"""
+        efficiency = {
+            resource: parse_int(getattr(self, field))
+            for resource, field in PACKING_EFFICIENCY_FIELDS.items()
+        }
+        if all(
+            value is not None and 1 <= value <= 100 for value in efficiency.values()
+        ):
+            return efficiency
+        return None
 
 
 def load_workloads(path):
@@ -141,7 +156,7 @@ def parse_int(value):
         return None
 
 
-def estimate_workload(instance_types, workload, packing_efficiency=100):
+def estimate_workload(instance_types, workload, packing_efficiency=None):
     "Returns (data, error), exactly one of which is None"
     replicas = parse_int(workload.replicas)
     if replicas is None or replicas < 0:
@@ -240,7 +255,10 @@ def model_label(cost_model, packing_efficiency):
         return "with whole nodes"
     if packing_efficiency is None:
         return "bin-packed"
-    return f"bin-packed at {packing_efficiency}%"
+    cores, memory = packing_efficiency["cores"], packing_efficiency["memory"]
+    if cores == memory:
+        return f"bin-packed at {cores}%"
+    return f"bin-packed at {cores}% CPU, {memory}% memory"
 
 
 def row_cells(workload, error, costs):
@@ -268,7 +286,7 @@ def row_cells(workload, error, costs):
 
 def total_text(costs, settings):
     "The net change across workloads, given each one's all_model_costs()"
-    model, efficiency = settings.cost_model, settings.efficiency()
+    model, efficiency = settings.cost_model, settings.packing_efficiency()
     estimated = [workload for workload in costs if workload]
     included = [workload[model] for workload in estimated if workload[model]]
     hourly, monthly, yearly = (
@@ -295,7 +313,7 @@ def total_text(costs, settings):
         )
     if model == "bin-packed" and efficiency is None:
         text.append(
-            "  ⚠ Packing efficiency must be a whole number from 1 to 100", "bold red"
+            "  ⚠ Packing efficiencies must be whole numbers from 1 to 100", "bold red"
         )
     elif len(included) < len(estimated):
         unpackable = len(estimated) - len(included)
@@ -365,7 +383,7 @@ class SkroogeApp(App):
     #cost_model {
         width: 17;
     }
-    #packing_efficiency {
+    #cpu_packing_efficiency, #mem_packing_efficiency {
         width: 6;
     }
     #table {
@@ -479,17 +497,17 @@ class SkroogeApp(App):
                 ),
                 classes="setting",
             )
-            yield labelled(
-                "Packing efficiency (%)",
-                Input(
-                    self.settings.packing_efficiency,
-                    id="packing_efficiency",
-                    type="integer",
-                    validators=[Integer(minimum=1, maximum=100)],
-                    compact=True,
-                ),
-                classes="setting",
-            )
+            with Horizontal(classes="setting"):
+                yield Label("Packing efficiency (%)")
+                for resource, field in PACKING_EFFICIENCY_FIELDS.items():
+                    yield Label("CPU" if resource == "cores" else "memory")
+                    yield Input(
+                        getattr(self.settings, field),
+                        id=field,
+                        type="integer",
+                        validators=[Integer(minimum=1, maximum=100)],
+                        compact=True,
+                    )
         yield DataTable(id="table", cursor_type="row", zebra_stripes=True)
         yield Static(id="total")
         yield Footer()
@@ -508,9 +526,9 @@ class SkroogeApp(App):
         self.select(0)
 
     def refresh_estimates(self):
-        efficiency = self.settings.efficiency()
+        efficiency = self.settings.packing_efficiency()
         self.results = [
-            estimate_workload(self.instance_types, workload, efficiency or 100)
+            estimate_workload(self.instance_types, workload, efficiency)
             for workload in self.workloads
         ]
         self.costs = [all_model_costs(data, efficiency) for data, _ in self.results]
@@ -536,7 +554,7 @@ class SkroogeApp(App):
         workload = self.workloads[self.selected]
         data, error = self.results[self.selected]
         costs = self.costs[self.selected]
-        efficiency = self.settings.efficiency()
+        efficiency = self.settings.packing_efficiency()
         self.query_one(
             "#estimate"
         ).border_title = f"Estimate · {workload.name or '(unnamed)'}"
@@ -612,13 +630,12 @@ class SkroogeApp(App):
     def model_summary(self, data, costs, model, efficiency):
         "One line on the selected workload's cost under a cost model"
         active = model == self.settings.cost_model
-        text = Text(
-            f"{'▶' if active else ' '} {model_label(model, efficiency).capitalize()}: "
-        )
+        label = model_label(model, efficiency)
+        text = Text(f"{'▶' if active else ' '} {label[0].upper()}{label[1:]}: ")
         model_costs = costs[model]
         if model_costs is None:
             text.append(
-                "enter a packing efficiency from 1 to 100"
+                "enter packing efficiencies from 1 to 100"
                 if efficiency is None
                 else f"skrooge can't split {data['instance']} pricing into cores and memory",
                 "dim",
@@ -740,9 +757,9 @@ class SkroogeApp(App):
         self.exit()
 
     def summary_table(self):
-        efficiency = self.settings.efficiency()
+        efficiency = self.settings.packing_efficiency()
         results = [
-            estimate_workload(self.instance_types, workload, efficiency or 100)
+            estimate_workload(self.instance_types, workload, efficiency)
             for workload in self.workloads
         ]
         costs = [all_model_costs(data, efficiency) for data, _ in results]

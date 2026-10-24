@@ -25,12 +25,19 @@ def render_english(data):
     resource_costs = data["resource_costs"]
     if resource_costs:
         click.echo(
-            f"Bin-packed in a cluster at {data['packing_efficiency']}% efficiency, this workload will cost ${resource_costs['total']['hourly']}/h (or ${resource_costs['total']['monthly']}/m (or ${resource_costs['total']['yearly']}/y)): ${resource_costs['cores']['monthly']}/m for cores and ${resource_costs['memory']['monthly']}/m for memory."
+            f"Bin-packed in a cluster at {efficiency_text(data['packing_efficiency'])}, this workload will cost ${resource_costs['total']['hourly']}/h (or ${resource_costs['total']['monthly']}/m (or ${resource_costs['total']['yearly']}/y)): ${resource_costs['cores']['monthly']}/m for cores and ${resource_costs['memory']['monthly']}/m for memory."
         )
     else:
         click.echo(
             f"skrooge can't split {data['instance']} pricing into cores and memory, so there's no bin-packed estimate."
         )
+
+
+def efficiency_text(packing_efficiency):
+    cores, memory = packing_efficiency["cores"], packing_efficiency["memory"]
+    if cores == memory:
+        return f"{cores}% efficiency"
+    return f"{cores}% CPU and {memory}% memory efficiency"
 
 
 def render_json(data):

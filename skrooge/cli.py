@@ -89,6 +89,16 @@ def cli():
     default=100,
 )
 @click.option(
+    "--cpu-packing-efficiency",
+    help="Like --packing-efficiency, for CPU only. Default: --packing-efficiency",
+    type=click.IntRange(1, 100),
+)
+@click.option(
+    "--mem-packing-efficiency",
+    help="Like --packing-efficiency, for memory only. Default: --packing-efficiency",
+    type=click.IntRange(1, 100),
+)
+@click.option(
     "-f",
     "--format",
     help="The output format. Default: english",
@@ -96,7 +106,16 @@ def cli():
     default="english",
 )
 def estimate(
-    replicas, cpu, mem, instance, cost_class, region, packing_efficiency, format
+    replicas,
+    cpu,
+    mem,
+    instance,
+    cost_class,
+    region,
+    packing_efficiency,
+    cpu_packing_efficiency,
+    mem_packing_efficiency,
+    format,
 ):
     "Quick estimate of the cost or savings a kubernetes scale update will incur"
     logger.info(f"{replicas=}")
@@ -116,7 +135,10 @@ def estimate(
             mem,
             cost_class=cost_class,
             region=region,
-            packing_efficiency=packing_efficiency,
+            packing_efficiency={
+                "cores": cpu_packing_efficiency or packing_efficiency,
+                "memory": mem_packing_efficiency or packing_efficiency,
+            },
         )
     except EstimateError as e:
         raise click.BadParameter(str(e)) from None
