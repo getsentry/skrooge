@@ -1,85 +1,24 @@
 import difflib
-import functools
-import json
 import logging
-import re
-from importlib.resources import files
+from pathlib import Path
 
 import click
 import click_log
 
 from .render import render
 from .utils import (
-    calculate_cost,
-    determine_constrained_resource,
-    determine_instance_count_required,
+    COST_CLASSES,
+    EstimateError,
+    available_regions,
+    calculate_estimate,
+    find_instance_data,
+    load_instance_types,
 )
 
 logger = logging.getLogger(__name__)
 # Configure the package logger so --verbosity also covers skrooge.utils
 package_logger = logging.getLogger("skrooge")
 click_log.basic_config(package_logger)
-
-COST_CLASSES = ["sud", "ondemand", "preemptible", "cud-1y", "cud-3y"]
-MISSING_INSTANCE_TYPE_LINK = "https://github.com/getsentry/skrooge/issues/new?assignees=&labels=&projects=&template=BUG_REPORT.md"
-
-
-@functools.cache
-def load_instance_types():
-    return json.loads(
-        files("skrooge").joinpath("instances.json").read_text(encoding="utf-8")
-    )
-
-
-def available_regions(cost_class=None, instance_data=None):
-    "Regions with pricing, optionally only in one cost class or for one instance type"
-    if instance_data is None:
-        all_instance_data = [
-            data
-            for family in load_instance_types().values()
-            for data in family.values()
-            if data
-        ]
-    else:
-        all_instance_data = [instance_data]
-    # Skip aggregate pricing keys such as "us" or "asia-east"; GCP regions end in a digit
-    return sorted(
-        {
-            region
-            for data in all_instance_data
-            for region, prices in data.get("regions", {}).items()
-            if region[-1].isdigit() and (cost_class is None or cost_class in prices)
-        },
-        # Natural sort, so europe-west2 comes before europe-west10
-        key=lambda region: [
-            int(part) if part.isdigit() else part for part in re.split(r"(\d+)", region)
-        ],
-    )
-
-
-def find_instance_type(instance):
-    "Look up an instance type's data, suggesting similar ones if it doesn't exist"
-    instance_family = instance.split("-")[0]
-    instance_types = load_instance_types()
-
-    try:
-        return instance_types[instance_family][instance]
-    except KeyError:
-        try:
-            close_matches = difflib.get_close_matches(
-                instance, instance_types[instance_family].keys()
-            )
-        except KeyError:
-            logger.info(f"{instance_family}, {instance_types.keys()}")
-            close_matches = difflib.get_close_matches(
-                instance_family, instance_types.keys(), cutoff=0.4
-            )
-            raise click.BadParameter(
-                f"{instance_family} instance family not found. Did you mean: {', '.join(close_matches)}\nMissing an instance family that exists? {MISSING_INSTANCE_TYPE_LINK}"
-            ) from None
-        raise click.BadParameter(
-            f"{instance} not found. Did you mean: {', '.join(close_matches)}\nMissing an instance type that exists? {MISSING_INSTANCE_TYPE_LINK}"
-        ) from None
 
 
 class RegionChoice(click.Choice):
@@ -143,99 +82,44 @@ def cli():
     default="us-central1",
 )
 @click.option(
+    "-p",
+    "--packing-efficiency",
+    help="For the bin-packed estimate, the percentage of the cluster's CPU and memory that pods request on average. Default: 100",
+    type=click.IntRange(1, 100),
+    default=100,
+)
+@click.option(
     "-f",
     "--format",
     help="The output format. Default: english",
     type=click.Choice(["english", "json"], case_sensitive=False),
     default="english",
 )
-def estimate(replicas, cpu, mem, instance, cost_class, region, format):
+def estimate(
+    replicas, cpu, mem, instance, cost_class, region, packing_efficiency, format
+):
     "Quick estimate of the cost or savings a kubernetes scale update will incur"
     logger.info(f"{replicas=}")
     logger.info(f"{cpu=}m")
     logger.info(f"{mem=}MiB")
     logger.info(f"{instance=}")
 
-    instance_family = instance.split("-")[0]
-    instance_data = find_instance_type(instance)
-
-    if not all(
-        isinstance(instance_data["specs"][resource], (int, float))
-        for resource in ("cores", "memory")
-    ):
-        raise click.BadParameter(
-            f"{instance} is a shared-core instance type without a fixed number of cores, so skrooge can't estimate it."
-        )
-
     if cpu == 0 and mem == 0:
         raise click.BadParameter("--cpu and --mem can't both be 0.")
 
-    prices = instance_data["regions"].get(region, {})
-    if cost_class not in prices:
-        regions_with_pricing = available_regions(cost_class, instance_data)
-        suggestions = []
-        if prices:
-            suggestions.append(
-                f"Cost classes available for {instance} in {region}: {', '.join(c for c in COST_CLASSES if c in prices)}"
-            )
-        close_matches = difflib.get_close_matches(region, regions_with_pricing)
-        if close_matches:
-            suggestions.append(
-                f"Similar regions with {cost_class} pricing for {instance}: {', '.join(close_matches)}"
-            )
-        if regions_with_pricing:
-            suggestions.append(
-                f"List them all with: skrooge regions --instance {instance} --cost-class {cost_class}"
-            )
-        raise click.BadParameter(
-            "\n".join(
-                [f"No {cost_class} pricing for {instance} in {region}.", *suggestions]
-            )
+    try:
+        data = calculate_estimate(
+            load_instance_types(),
+            instance,
+            replicas,
+            cpu,
+            mem,
+            cost_class=cost_class,
+            region=region,
+            packing_efficiency=packing_efficiency,
         )
-
-    delta_cpu = replicas * abs(cpu)
-    delta_mem = replicas * abs(mem)
-
-    logger.info(f"{delta_cpu=}m {delta_mem=}MiB")
-
-    constrained_resource = determine_constrained_resource(instance_data, cpu, mem)
-    logger.info(f"{constrained_resource=}")
-
-    if constrained_resource == "cores":
-        resource_requirement = delta_cpu
-    else:
-        resource_requirement = delta_mem
-
-    required_instance_count = determine_instance_count_required(
-        instance_data, constrained_resource, resource_requirement
-    )
-    logger.info(f"{required_instance_count=}")
-
-    costs = calculate_cost(
-        instance_data,
-        required_instance_count,
-        cost_class=cost_class,
-        region=region,
-    )
-    logger.info(costs)
-
-    data = {
-        "replicas": replicas,
-        "cpu": cpu,
-        "mem": mem,
-        "delta_cpu": delta_cpu,
-        "delta_mem": delta_mem,
-        "constrained_resource": constrained_resource,
-        "resource_requirement": resource_requirement,
-        "required_instance_count": required_instance_count,
-        "instance": instance,
-        "instance_family": instance_family,
-        "instance_specs": instance_data["specs"],
-        "costs": costs,
-        "region": region,
-    }
-
-    logger.info(f"{data=}")
+    except EstimateError as e:
+        raise click.BadParameter(str(e)) from None
 
     render(format=format, data=data)
 
@@ -253,13 +137,51 @@ def estimate(replicas, cpu, mem, instance, cost_class, region, format):
 )
 def regions(instance, cost_class):
     "List the regions skrooge has pricing for"
-    instance_data = find_instance_type(instance) if instance else None
+    try:
+        instance_data = (
+            find_instance_data(load_instance_types(), instance) if instance else None
+        )
+    except EstimateError as e:
+        raise click.BadParameter(str(e)) from None
     matching_regions = available_regions(cost_class, instance_data)
     if not matching_regions:
         raise click.ClickException(
             f"No region has {cost_class or 'any'} pricing for {instance or 'any instance type'}."
         )
     click.echo("\n".join(matching_regions))
+
+
+@cli.command(name="tui")
+@click.argument(
+    "workloads_file",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default="skrooge.json",
+)
+def tui(workloads_file):
+    """Interactively estimate one or more workloads, with live results
+
+    Workloads are loaded from WORKLOADS_FILE if it exists, and saved to it
+    with ctrl+s. Default: skrooge.json
+    """
+    # Imported here so the estimate command doesn't pay for loading Textual
+    from rich.console import Console
+
+    from .tui import SkroogeApp, load_workloads
+
+    workloads, settings = [], None
+    if workloads_file.exists():
+        try:
+            workloads, settings = load_workloads(workloads_file)
+        except (OSError, TypeError, ValueError) as e:
+            raise click.BadParameter(
+                f"{workloads_file}: {e}", param_hint="WORKLOADS_FILE"
+            ) from None
+
+    app = SkroogeApp(workloads, workloads_file, settings=settings)
+    app.run()
+    # Leave the final numbers in the terminal once the TUI is gone
+    if app.return_code == 0:
+        Console().print(app.summary_table())
 
 
 if __name__ == "__main__":
