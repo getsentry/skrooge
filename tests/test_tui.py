@@ -3,6 +3,7 @@ import functools
 import json
 from dataclasses import replace
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 
@@ -12,6 +13,7 @@ from skrooge.tui import (
     Workload,
     estimate_workload,
     load_workloads,
+    markdown_table,
     save_workloads,
     shape_costs,
 )
@@ -219,6 +221,12 @@ def test_shape_costs_keep_local_ssd():
     assert shape_costs(with_lssd, lssd) == []
 
 
+def test_markdown_table_escapes_pipes():
+    row = ["api|web", "3", "1000", "2048", "n2-standard-32", "us-central1", "sud"]
+    markdown = markdown_table([[*row, "1", "$907", "$10,890"]], "Net change")
+    assert "| api\\|web | 3 | 1000 |" in markdown
+
+
 def test_save_and_load_workloads(tmp_path):
     path = tmp_path / "skrooge.json"
     original = workloads()
@@ -417,6 +425,25 @@ async def test_save_writes_workloads_file(tmp_path):
         "legacy-api",
         "workload-4",
     ]
+
+
+@app_test
+async def test_copy_workloads_as_markdown(tmp_path):
+    app = SkroogeApp(workloads(), tmp_path / "skrooge.json", instance_types)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.press("ctrl+y")
+        await pilot.pause()
+    assert app.clipboard == dedent(
+        """\
+        | Workload | Replicas | CPU (m) | Mem (MiB) | Instance | Region | Class | Nodes | $/month | $/year |
+        | --- | ---: | ---: | ---: | --- | --- | --- | ---: | ---: | ---: |
+        | web | 10 → 40 | 2500 | 2024 | n2-standard-32 | us-central1 | sud | 3 | $2,722 | $32,669 |
+        | worker | 0 → 12 | 4000 | 16384 | n2-highmem-16 | us-central1 | cud-1y | 3 | $1,446 | $17,352 |
+        | legacy-api | 20 → 0 | 2000 | 4096 | n1-standard-16 | us-central1 | sud | -3 | -$1,165 | -$13,981 |
+
+        Net change: $4.11/h · $3,003/mo · $36,040/yr with whole nodes across 3 workloads (bin-packed at 100%: $1,784/mo)
+        """
+    )
 
 
 @app_test

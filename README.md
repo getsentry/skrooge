@@ -93,8 +93,11 @@ Bin-packed estimates use GCP's per-vCPU and per-GiB prices for each machine fami
 | `ctrl+n` | Add a workload (starts as a copy of the selected one) |
 | `ctrl+r` | Remove the selected workload |
 | `ctrl+b` | Switch the workloads table and totals between whole nodes and bin-packed |
+| `ctrl+y` | Copy the workloads table and net change as Markdown, to paste into a pull request or doc |
 | `ctrl+s` | Save the workloads and settings |
 | `ctrl+q` | Quit, leaving a summary table in your terminal |
+
+Copying works in terminals that let apps set the clipboard (with OSC 52), which most do, but not macOS's Terminal. In tmux, turn on `set-clipboard`.
 
 Use `tab` to move between fields, and the arrow keys in the workloads table to pick which workload you're editing. For each workload, enter its replicas and per-replica CPU and memory as they are before the change and after it, and skrooge works out the change: 10 replicas at 2,000m becoming 20 at 1,500m is 10 more cores. Use 0 replicas before for a new workload, or 0 after for one you're removing. A change that shrinks the resource a workload is bound by is a saving in the totals.
 

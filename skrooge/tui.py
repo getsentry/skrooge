@@ -58,6 +58,9 @@ COLUMNS = [
     ("yearly", "$/year"),
 ]
 
+# The columns of numbers, which Markdown tables align right
+NUMBER_COLUMNS = {"replicas", "cpu", "mem", "nodes", "monthly", "yearly"}
+
 _keys = count()
 
 
@@ -418,6 +421,22 @@ def total_text(costs, settings):
     return text
 
 
+def markdown_table(rows, total):
+    "The workloads table as Markdown, given each workload's row_cells() and the total"
+
+    def line(cells):
+        return "| " + " | ".join(str(cell).replace("|", "\\|") for cell in cells) + " |"
+
+    lines = [
+        line(label for _, label in COLUMNS),
+        line("---:" if key in NUMBER_COLUMNS else "---" for key, _ in COLUMNS),
+        *(line(cells) for cells in rows),
+        "",
+        str(total),
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def labelled(label, widget, classes="field"):
     return Horizontal(Label(label), widget, classes=classes)
 
@@ -501,11 +520,43 @@ class SkroogeApp(App):
         padding: 0 1;
     }
     """
+    # Short descriptions, so the footer fits 80 columns
     BINDINGS = (
-        Binding("ctrl+n", "add_workload", "Add workload", priority=True),
-        Binding("ctrl+r", "remove_workload", "Remove workload", priority=True),
-        Binding("ctrl+b", "toggle_cost_model", "Cost model", priority=True),
-        Binding("ctrl+s", "save", "Save", priority=True),
+        Binding(
+            "ctrl+n",
+            "add_workload",
+            "Add",
+            tooltip="Add a workload, starting as a copy of the selected one",
+            priority=True,
+        ),
+        Binding(
+            "ctrl+r",
+            "remove_workload",
+            "Remove",
+            tooltip="Remove the selected workload",
+            priority=True,
+        ),
+        Binding(
+            "ctrl+b",
+            "toggle_cost_model",
+            "Cost model",
+            tooltip="Switch between whole nodes and bin-packed",
+            priority=True,
+        ),
+        Binding(
+            "ctrl+y",
+            "copy_markdown",
+            "Copy Markdown",
+            tooltip="Copy the workloads table and total as Markdown",
+            priority=True,
+        ),
+        Binding(
+            "ctrl+s",
+            "save",
+            "Save",
+            tooltip="Save the workloads and settings",
+            priority=True,
+        ),
     )
 
     def __init__(self, workloads, path, instance_types=None, settings=None):
@@ -911,26 +962,44 @@ class SkroogeApp(App):
             return
         self.exit()
 
-    def summary_table(self):
+    def action_copy_markdown(self):
+        self.copy_to_clipboard(markdown_table(*self.summary()))
+        count = len(self.workloads)
+        self.notify(
+            f"Copied {count} workload{'s' if count != 1 else ''} as a Markdown table"
+        )
+
+    def summary(self):
+        """Each workload's row in the workloads table, and the total
+
+        These are estimated afresh, as the app may have exited before mounting.
+        """
         efficiency = self.settings.packing_efficiency()
         results = [
             estimate_workload(self.instance_types, workload, efficiency)
             for workload in self.workloads
         ]
         costs = [all_model_costs(data, efficiency) for data, _ in results]
+        rows = [
+            row_cells(
+                workload,
+                error,
+                workload_costs and workload_costs[self.settings.cost_model],
+            )
+            for workload, (_, error), workload_costs in zip(
+                self.workloads, results, costs, strict=True
+            )
+        ]
+        return rows, total_text(costs, self.settings)
+
+    def summary_table(self):
+        rows, total = self.summary()
+        efficiency = self.settings.packing_efficiency()
         table = Table(
             *(label for _, label in COLUMNS),
             title=f"Workloads {model_label(self.settings.cost_model, efficiency)}",
-            caption=total_text(costs, self.settings),
+            caption=total,
         )
-        for workload, (_, error), workload_costs in zip(
-            self.workloads, results, costs, strict=True
-        ):
-            table.add_row(
-                *row_cells(
-                    workload,
-                    error,
-                    workload_costs and workload_costs[self.settings.cost_model],
-                )
-            )
+        for cells in rows:
+            table.add_row(*cells)
         return table
