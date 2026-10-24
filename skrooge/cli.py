@@ -82,6 +82,17 @@ def find_instance_type(instance):
         ) from None
 
 
+class RegionChoice(click.Choice):
+    "A choice of region whose error suggests similar regions instead of listing them all"
+
+    def get_invalid_choice_message(self, value, ctx):
+        close_matches = difflib.get_close_matches(str(value).lower(), self.choices)
+        suggestion = (
+            f" Did you mean: {', '.join(close_matches)}" if close_matches else ""
+        )
+        return f"{value!r} isn't a region skrooge has pricing for.{suggestion}\nList them with: skrooge regions"
+
+
 @click.group()
 @click.version_option()
 def cli():
@@ -126,7 +137,7 @@ def cli():
 @click.option(
     "--region",
     help="The region to use for cost calculation. Default: us-central1. List them with: skrooge regions",
-    type=click.Choice(available_regions(), case_sensitive=False),
+    type=RegionChoice(available_regions(), case_sensitive=False),
     # The choices are long, so leave them out of --help
     metavar="REGION",
     default="us-central1",
