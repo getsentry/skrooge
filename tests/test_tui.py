@@ -1,6 +1,7 @@
 import asyncio
 import functools
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from skrooge.tui import (
     estimate_workload,
     load_workloads,
     save_workloads,
+    shape_costs,
 )
 
 # A fixed copy of part of instances.json (us-central1 only), so tests that check prices
@@ -133,6 +135,90 @@ def test_estimate_workload_reports_invalid_inputs(changes, error):
     assert message.startswith(error)
 
 
+def shape_summary(estimates):
+    return [
+        (data["instance"], data["required_instance_count"], data["costs"]["monthly"])
+        for data in estimates
+    ]
+
+
+@pytest.mark.parametrize(
+    ("sizes", "shapes"),
+    [
+        # 40 replicas at 2500m and 2024 MiB need 100 cores, or 4 nodes of any shape
+        (
+            {},
+            [
+                ("n2-highcpu-32", 4, 2680),
+                ("n2-standard-32", 4, 3630),
+                ("n2-highmem-32", 4, 4897),
+            ],
+        ),
+        # At 1000m and 16 GiB, they need 40 cores and 640 GiB
+        (
+            {"cpu_after": "1000", "mem_after": "16384"},
+            [
+                ("n2-highmem-32", 3, 3673),
+                ("n2-standard-32", 5, 4537),
+                ("n2-highcpu-32", 20, 13399),
+            ],
+        ),
+    ],
+)
+def test_shape_costs_compare_shapes_of_the_same_size(sizes, shapes):
+    web = replace(workloads()[0], **sizes)
+    assert shape_summary(shape_costs(instance_types, web)) == shapes
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        # Nothing runs after the change
+        {"replicas_after": "0"},
+        {"cpu_after": "-"},
+        # No other c2 machine type has 30 vCPUs
+        {"instance": "c2-standard-30"},
+        # Workloads on GPU machine types need their GPUs
+        {"instance": "a2-highgpu-1g", "cost_class": "ondemand"},
+    ],
+)
+def test_shape_costs_without_shapes_to_compare(changes):
+    assert shape_costs(instance_types, replace(workloads()[0], **changes)) == []
+
+
+def test_shape_costs_skip_shared_core_machine_types():
+    with_e2 = json.loads(json.dumps(instance_types))
+    for shape, memory, price in (
+        ("e2-standard-2", 8, 0.067),
+        ("e2-highcpu-2", 2, 0.05),
+    ):
+        with_e2["e2"][shape] = {
+            "regions": {"us-central1": {"ondemand": price}},
+            "specs": {"cores": 2, "memory": memory},
+        }
+    # e2-micro has 2 vCPUs, but is billed for a quarter of one
+    web = replace(workloads()[0], instance="e2-standard-2", cost_class="ondemand")
+    assert [data["instance"] for data in shape_costs(with_e2, web)] == [
+        "e2-highcpu-2",
+        "e2-standard-2",
+    ]
+    assert shape_costs(with_e2, replace(web, instance="e2-micro")) == []
+
+
+def test_shape_costs_keep_local_ssd():
+    with_lssd = json.loads(json.dumps(instance_types))
+    n2 = with_lssd["n2"]
+    n2["n2-standard-32-lssd"] = json.loads(json.dumps(n2["n2-standard-32"]))
+    n2["n2-standard-32-lssd"]["regions"]["us-central1"]["sud"] = 1.5
+    web = workloads()[0]
+    assert "n2-standard-32-lssd" not in {
+        data["instance"] for data in shape_costs(with_lssd, web)
+    }
+    # It's the only 32-vCPU n2 shape with local SSD
+    lssd = replace(web, instance="n2-standard-32-lssd")
+    assert shape_costs(with_lssd, lssd) == []
+
+
 def test_save_and_load_workloads(tmp_path):
     path = tmp_path / "skrooge.json"
     original = workloads()
@@ -209,6 +295,33 @@ async def test_mount_shows_estimates_without_changing_workloads(tmp_path):
         assert cell(app, 2, "monthly") == "-$1,165"
         total = str(app.query_one("#total").render())
         assert "Net change: $4.11/h · $3,003/mo · $36,040/yr" in total
+
+
+@app_test
+async def test_estimate_compares_shapes_of_the_same_size(tmp_path):
+    app = SkroogeApp(workloads(), tmp_path / "skrooge.json", instance_types)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        caption = str(app.query_one("#shapes_caption").render())
+        assert caption == (
+            "All 40 replicas after the change on 32-vCPU n2 shapes, with whole nodes"
+        )
+        shapes = app.query_one("#shapes")
+        assert shapes.display
+        rows = [[str(cell) for cell in shapes.get_row_at(row)] for row in range(3)]
+        assert rows == [
+            ["  n2-highcpu-32", "32", "4", "$2,680", "-26%"],
+            ["▶ n2-standard-32", "128", "4", "$3,630", ""],
+            ["  n2-highmem-32", "256", "4", "$4,897", "+35%"],
+        ]
+
+        # legacy-api is being removed, so nothing will run on it
+        app.query_one("#table").focus()
+        await pilot.press("down", "down")
+        await pilot.pause()
+        assert app.selected == 2
+        assert not shapes.display
+        assert not app.query_one("#shapes_caption").display
 
 
 @app_test

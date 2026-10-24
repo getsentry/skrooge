@@ -24,6 +24,7 @@ from .utils import (
     hourly_price,
     instance_names,
     load_instance_types,
+    priced_by_resource,
     resource_prices,
 )
 
@@ -212,6 +213,51 @@ def estimate_workload(instance_types, workload, packing_efficiency=None):
     except EstimateError as e:
         return None, str(e)
     return data, None
+
+
+def shape_costs(instance_types, workload):
+    """Estimates for running all of a workload's replicas after its change on each
+    machine type in its family with as many vCPUs, cheapest first, or [] if there
+    are none to compare it with
+
+    Only these compare fairly: skrooge doesn't count the overhead of each node, so
+    smaller nodes always look cheaper, and families differ in performance. They
+    differ with whole nodes only, as a family's shapes share per-resource prices.
+    """
+    sizes, error = workload_sizes(workload)
+    if error:
+        return []
+    cpu, mem = requests(sizes, "after")
+    instance = workload.instance.strip().lower()
+    family = instance_types.get(instance.split("-")[0], {})
+    specs = family.get(instance, {}).get("specs")
+    if (cpu == 0 and mem == 0) or not specs or not priced_by_resource(instance, specs):
+        return []
+    estimates = []
+    for shape, data in family.items():
+        if (
+            data["specs"]["cores"] == specs["cores"]
+            # Workloads on local SSD machine types need it
+            and shape.endswith("-lssd") == instance.endswith("-lssd")
+            and priced_by_resource(shape, data["specs"])
+            and hourly_price(data, workload.cost_class, workload.region)
+        ):
+            estimates.append(
+                calculate_estimate(
+                    instance_types,
+                    shape,
+                    1,
+                    cpu,
+                    mem,
+                    cost_class=workload.cost_class,
+                    region=workload.region,
+                )
+            )
+    if len(estimates) < 2:
+        return []
+    return sorted(
+        estimates, key=lambda data: (data["costs"]["hourly"], data["instance"])
+    )
 
 
 def sign(change):
@@ -420,7 +466,13 @@ class SkroogeApp(App):
     }
     #tiers {
         height: auto;
+    }
+    #shapes_caption {
         margin-top: 1;
+        color: $text-muted;
+    }
+    #shapes {
+        height: auto;
     }
     #settings {
         height: 1;
@@ -546,6 +598,8 @@ class SkroogeApp(App):
             with Vertical(id="estimate"):
                 yield Static(id="summary")
                 yield DataTable(id="tiers", cursor_type="none")
+                yield Static(id="shapes_caption")
+                yield DataTable(id="shapes", cursor_type="none")
         with Horizontal(id="settings"):
             yield labelled(
                 "Cost model",
@@ -580,6 +634,11 @@ class SkroogeApp(App):
         tiers.add_column("Cost class")
         for label in ("$/node/h", "$/vCPU/h", "$/GiB/h", "Nodes $/mo", "Packed $/mo"):
             tiers.add_column(Text(label, justify="right"))
+        shapes = self.query_one("#shapes", DataTable)
+        shapes.can_focus = False
+        shapes.add_column("Shape")
+        for label in ("GiB/node", "Nodes", "$/mo", "vs now"):
+            shapes.add_column(Text(label, justify="right"))
         table = self.query_one("#table", DataTable)
         for key, label in COLUMNS:
             table.add_column(label, key=key)
@@ -683,6 +742,43 @@ class SkroogeApp(App):
                 *(
                     Text(cell, "bold" if current else "", justify="right")
                     for cell in cells
+                ),
+            )
+        self.show_shapes(workload, data)
+
+    def show_shapes(self, workload, data):
+        "Compare the selected workload's machine type with the others of its size"
+        estimates = [] if data is None else shape_costs(self.instance_types, workload)
+        caption = self.query_one("#shapes_caption", Static)
+        shapes = self.query_one("#shapes", DataTable)
+        caption.display = shapes.display = bool(estimates)
+        shapes.clear()
+        if not estimates:
+            return
+        replicas = parse_int(workload.replicas_after)
+        caption.update(
+            f"All {replicas} replica{'s' if replicas != 1 else ''} after the change on "
+            f"{data['instance_specs']['cores']}-vCPU {data['instance_family']} shapes, "
+            "with whole nodes"
+        )
+        now = next(
+            estimate["costs"]["monthly"]
+            for estimate in estimates
+            if estimate["instance"] == data["instance"]
+        )
+        for estimate in estimates:
+            current = estimate["instance"] == data["instance"]
+            monthly = estimate["costs"]["monthly"]
+            style = "bold" if current else ""
+            shapes.add_row(
+                Text(f"{'▶' if current else ' '} {estimate['instance']}", style),
+                Text(quantity(estimate["instance_specs"]["memory"]), justify="right"),
+                Text(str(estimate["required_instance_count"]), justify="right"),
+                Text(money(monthly), style, justify="right"),
+                Text(
+                    "" if current else f"{monthly / now - 1:+.0%}",
+                    "green" if monthly < now else "",
+                    justify="right",
                 ),
             )
 

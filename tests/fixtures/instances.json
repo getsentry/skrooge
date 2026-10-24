@@ -15,6 +15,36 @@
         "memory": 128
       }
     },
+    "n2-highcpu-32": {
+      "regions": {
+        "us-central1": {
+          "ondemand": 1.14714,
+          "sud": 0.91771,
+          "preemptible": 0.2968,
+          "cud-1y": 0.72269,
+          "cud-3y": 0.51622
+        }
+      },
+      "specs": {
+        "cores": 32,
+        "memory": 32
+      }
+    },
+    "n2-highmem-32": {
+      "regions": {
+        "us-central1": {
+          "ondemand": 2.09622,
+          "sud": 1.67698,
+          "preemptible": 0.54208,
+          "cud-1y": 1.32054,
+          "cud-3y": 0.94339
+        }
+      },
+      "specs": {
+        "cores": 32,
+        "memory": 256
+      }
+    },
     "n2-highmem-16": {
       "regions": {
         "us-central1": {

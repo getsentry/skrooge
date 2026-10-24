@@ -100,6 +100,8 @@ Use `tab` to move between fields, and the arrow keys in the workloads table to p
 
 The settings above the workloads table choose the cost model and the CPU and memory packing efficiencies, which apply to every workload. The estimate panel always shows the selected workload under both models. Bin-packed costs treat each resource separately, so a workload that requests more CPU but less memory nets the two out. With whole nodes it would pay for the CPU's extra nodes.
 
+The estimate panel also compares the workload's machine type with the others in its family with as many vCPUs, by the cost of running all its replicas after the change on whole nodes. For a CPU-bound workload on `n2-standard-32`, `n2-highcpu-32` is usually cheaper. Machine types of other sizes or families don't compare fairly: skrooge doesn't count the overhead of each node, so smaller nodes would always look cheaper, and families differ in performance. Bin-packed, every machine type in a family costs the same.
+
 Workloads are loaded from and saved to `skrooge.json` in the current directory; pass a path to use another file:
 
     uvx skrooge tui capacity-plan.json
