@@ -1,0 +1,247 @@
+{
+  "n2": {
+    "n2-standard-32": {
+      "regions": {
+        "us-central1": {
+          "ondemand": 1.55389,
+          "sud": 1.24311,
+          "preemptible": 0.40192,
+          "cud-1y": 0.97891,
+          "cud-3y": 0.6993
+        }
+      },
+      "specs": {
+        "cores": 32,
+        "memory": 128
+      }
+    },
+    "n2-highcpu-32": {
+      "regions": {
+        "us-central1": {
+          "ondemand": 1.14714,
+          "sud": 0.91771,
+          "preemptible": 0.2968,
+          "cud-1y": 0.72269,
+          "cud-3y": 0.51622
+        }
+      },
+      "specs": {
+        "cores": 32,
+        "memory": 32
+      }
+    },
+    "n2-highmem-32": {
+      "regions": {
+        "us-central1": {
+          "ondemand": 2.09622,
+          "sud": 1.67698,
+          "preemptible": 0.54208,
+          "cud-1y": 1.32054,
+          "cud-3y": 0.94339
+        }
+      },
+      "specs": {
+        "cores": 32,
+        "memory": 256
+      }
+    },
+    "n2-highmem-16": {
+      "regions": {
+        "us-central1": {
+          "ondemand": 1.04811,
+          "sud": 0.83849,
+          "preemptible": 0.27104,
+          "cud-1y": 0.66027,
+          "cud-3y": 0.4717
+        }
+      },
+      "specs": {
+        "cores": 16,
+        "memory": 128
+      }
+    },
+    "n2-highcpu-8": {
+      "regions": {
+        "us-central1": {
+          "ondemand": 0.28678,
+          "sud": 0.22943,
+          "preemptible": 0.0742,
+          "cud-1y": 0.18067,
+          "cud-3y": 0.12906
+        }
+      },
+      "specs": {
+        "cores": 8,
+        "memory": 8
+      }
+    }
+  },
+  "n1": {
+    "n1-standard-16": {
+      "regions": {
+        "us-central1": {
+          "ondemand": 0.76,
+          "sud": 0.532,
+          "preemptible": 0.16,
+          "cud-1y": 0.47878,
+          "cud-3y": 0.34202
+        }
+      },
+      "specs": {
+        "cores": 16,
+        "memory": 60
+      }
+    },
+    "n1-highcpu-16": {
+      "regions": {
+        "us-central1": {
+          "ondemand": 0.5672,
+          "sud": 0.39704,
+          "preemptible": 0.12,
+          "cud-1y": 0.35707,
+          "cud-3y": 0.25506
+        }
+      },
+      "specs": {
+        "cores": 16,
+        "memory": 14.4
+      }
+    }
+  },
+  "c2": {
+    "c2-standard-30": {
+      "regions": {
+        "us-central1": {
+          "ondemand": 1.56606,
+          "sud": 1.25285,
+          "preemptible": 0.186,
+          "cud-1y": 0.98655,
+          "cud-3y": 0.62643
+        }
+      },
+      "specs": {
+        "cores": 30,
+        "memory": 120
+      }
+    }
+  },
+  "m3": {
+    "m3-ultramem-32": {
+      "regions": {
+        "us-central1": {
+          "ondemand": 6.0912,
+          "sud": 6.0912,
+          "cud-1y": 3.60512,
+          "cud-3y": 1.82768
+        }
+      },
+      "specs": {
+        "cores": 32,
+        "memory": 976
+      }
+    }
+  },
+  "e2": {
+    "e2-micro": {
+      "regions": {
+        "us-central1": {
+          "ondemand": 0.00838,
+          "preemptible": 0.00251
+        }
+      },
+      "specs": {
+        "cores": 2,
+        "memory": 1
+      }
+    },
+    "e2-standard-4": {
+      "regions": {
+        "us-central1": {
+          "ondemand": 0.13402,
+          "preemptible": 0.04021,
+          "sud": 0.13402,
+          "cud-1y": 0.08443,
+          "cud-3y": 0.06031
+        }
+      },
+      "specs": {
+        "cores": 4,
+        "memory": 16
+      }
+    },
+    "e2-highmem-4": {
+      "regions": {
+        "us-central1": {
+          "ondemand": 0.1808,
+          "preemptible": 0.05424,
+          "sud": 0.1808,
+          "cud-1y": 0.1139,
+          "cud-3y": 0.08136
+        }
+      },
+      "specs": {
+        "cores": 4,
+        "memory": 32
+      }
+    }
+  },
+  "a2": {
+    "a2-highgpu-1g": {
+      "regions": {
+        "us-central1": {
+          "ondemand": 3.67339,
+          "sud": 3.67339,
+          "preemptible": 1.46935,
+          "cud-1y": 2.31421,
+          "cud-3y": 1.28571
+        }
+      },
+      "specs": {
+        "cores": 12,
+        "memory": 85
+      }
+    },
+    "a2-highgpu-2g": {
+      "regions": {
+        "us-central1": {
+          "ondemand": 7.34677,
+          "sud": 7.34677,
+          "preemptible": 2.93871,
+          "cud-1y": 4.62841,
+          "cud-3y": 2.57142
+        }
+      },
+      "specs": {
+        "cores": 24,
+        "memory": 170
+      }
+    },
+    "a2-ultragpu-1g": {
+      "regions": {
+        "us-central1": {
+          "ondemand": 5.0277,
+          "sud": 5.0277,
+          "preemptible": 2.01103
+        }
+      },
+      "specs": {
+        "cores": 12,
+        "memory": 170
+      }
+    }
+  },
+  "f1": {
+    "f1-micro": {
+      "regions": {
+        "us-central1": {
+          "ondemand": 0.0076,
+          "preemptible": 0.0035
+        }
+      },
+      "specs": {
+        "cores": "shared",
+        "memory": 0.6
+      }
+    }
+  }
+}

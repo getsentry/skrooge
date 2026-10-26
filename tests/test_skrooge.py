@@ -1,8 +1,12 @@
+import json
+
 import pytest
 from click.testing import CliRunner
 
 from skrooge import cli as cli_module
+from skrooge import tui, utils
 from skrooge.cli import cli
+from skrooge.render import render
 
 REQUIRED_ARGS = ["--replicas", "30", "--cpu", "2500", "--mem", "2024"]
 
@@ -37,14 +41,20 @@ INSTANCE_DATA = {
         },
     },
     "resource_prices": {
-        "n2": {"me-central1": {"ondemand": {"cores": 0.03, "memory": 0.004}}},
+        "n2": {
+            "me-central1": {"ondemand": {"cores": 0.03, "memory": 0.004}},
+            # These add up to n2-standard-32's sud price
+            "us-central1": {"sud": {"cores": 0.0252888, "memory": 0.0033896}},
+        },
     },
 }
 
 
 @pytest.fixture
 def instance_data(monkeypatch):
-    monkeypatch.setattr(cli_module, "load_instance_types", lambda: INSTANCE_DATA)
+    # Each module that loads instances.json imports load_instance_types by name
+    for module in (cli_module, tui, utils):
+        monkeypatch.setattr(module, "load_instance_types", lambda: INSTANCE_DATA)
     return INSTANCE_DATA
 
 
@@ -126,8 +136,9 @@ def test_verbosity_includes_calculation_logs(instance_data):
     )
     assert result.exit_code == 0
     # logged from skrooge.cli
-    assert "constrained_resource='cores'" in result.output
+    assert "replicas=30" in result.output
     # logged from skrooge.utils
+    assert "constrained_resource='cores'" in result.output
     assert "Calculating constrained resource" in result.output
 
 
@@ -299,6 +310,154 @@ def test_zero_cpu_and_mem_is_rejected():
     )
     assert result.exit_code == 2
     assert "--cpu and --mem can't both be 0" in result.output
+
+
+def test_memory_only_change(instance_data):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "estimate",
+            "--instance",
+            "n2-standard-32",
+            "--replicas",
+            30,
+            "--cpu",
+            0,
+            "--mem",
+            8192,
+        ],
+    )
+    assert result.exit_code == 0
+    assert "memory-constrained" in result.output
+    assert "require 2 instances" in result.output
+
+
+def test_tui_loads_workloads_and_prints_summary(instance_data, tmp_path, monkeypatch):
+    path = tmp_path / "skrooge.json"
+    path.write_text(
+        json.dumps(
+            {
+                "workloads": [
+                    {
+                        "name": "web",
+                        "replicas_before": 10,
+                        "replicas_after": 40,
+                        "cpu_before": 2500,
+                        "cpu_after": 2500,
+                        "mem_before": 2024,
+                        "mem_after": 2024,
+                        "instance": "n2-standard-32",
+                    }
+                ]
+            }
+        )
+    )
+    # Quit as soon as the TUI starts
+    monkeypatch.setattr(tui.SkroogeApp, "run", lambda app: app.exit())
+
+    result = CliRunner().invoke(cli, ["tui", str(path)])
+    assert result.exit_code == 0
+    assert "web" in result.output
+    assert "$2,722" in result.output
+    assert "Net change" in result.output
+
+
+def test_tui_starts_with_a_workload_when_file_is_missing(tmp_path, monkeypatch):
+    started = []
+    monkeypatch.setattr(tui.SkroogeApp, "run", lambda app: started.append(app))
+
+    result = CliRunner().invoke(cli, ["tui", str(tmp_path / "new.json")])
+    assert result.exit_code == 0
+    assert started[0].workloads == [tui.Workload()]
+    assert started[0].path == tmp_path / "new.json"
+
+
+def test_tui_rejects_invalid_workloads_file(tmp_path):
+    path = tmp_path / "skrooge.json"
+    path.write_text('{"workloads": [{"memory": 1024}]}')
+
+    result = CliRunner().invoke(cli, ["tui", str(path)])
+    assert result.exit_code == 2
+    assert "unknown workload fields: memory" in result.output
+
+
+WEB_ARGS = ["estimate", "-i", "n2-standard-32", "-r", "30", "-c", "2500", "-m", "2024"]
+
+
+def test_bin_packed_estimate(instance_data):
+    result = CliRunner().invoke(cli, [*WEB_ARGS, "--packing-efficiency", "80"])
+    assert result.exit_code == 0
+    assert (
+        "Bin-packed in a cluster at 80% efficiency, this workload will cost $2.62/h (or $1914/m (or $22969/y)): $1731/m for cores and $183/m for memory."
+        in result.output
+    )
+
+
+def test_bin_packed_estimate_in_json(instance_data):
+    result = CliRunner().invoke(cli, [*WEB_ARGS, "--format", "json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["packing_efficiency"] == {"cores": 100, "memory": 100}
+    assert data["resource_costs"]["total"]["monthly"] == 1532
+
+
+def test_packing_efficiency_by_resource(instance_data):
+    # -p sets both, and the per-resource options override it
+    result = CliRunner().invoke(
+        cli, [*WEB_ARGS, "-p", "80", "--mem-packing-efficiency", "50", "-f", "json"]
+    )
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["packing_efficiency"] == {"cores": 80, "memory": 50}
+    # $1,385 / 0.8 and $147 / 0.5
+    assert data["resource_costs"]["cores"]["monthly"] == 1731
+    assert data["resource_costs"]["memory"]["monthly"] == 293
+
+    result = CliRunner().invoke(cli, [*WEB_ARGS, "--cpu-packing-efficiency", "85"])
+    assert "in a cluster at 85% CPU and 100% memory efficiency" in result.output
+
+
+def test_no_bin_packed_estimate_when_pricing_cant_be_split(instance_data):
+    # n1-highcpu-16 has no recorded resource prices, and is the only n1 type to fit
+    result = CliRunner().invoke(
+        cli, ["estimate", *REQUIRED_ARGS, "--instance", "n1-highcpu-16"]
+    )
+    assert result.exit_code == 0
+    assert "skrooge can't split n1-highcpu-16 pricing into cores and memory" in (
+        result.output
+    )
+
+
+def test_packing_efficiency_must_be_a_percentage():
+    result = CliRunner().invoke(cli, [*WEB_ARGS, "--packing-efficiency", "0"])
+    assert result.exit_code == 2
+    assert "0 is not in the range 1<=x<=100" in result.output
+
+
+def test_tui_loads_settings(tmp_path, monkeypatch):
+    path = tmp_path / "skrooge.json"
+    path.write_text(
+        json.dumps(
+            {
+                "cost_model": "bin-packed",
+                "cpu_packing_efficiency": 75,
+                "mem_packing_efficiency": 60,
+                "workloads": [],
+            }
+        )
+    )
+    started = []
+    monkeypatch.setattr(tui.SkroogeApp, "run", lambda app: started.append(app))
+
+    result = CliRunner().invoke(cli, ["tui", str(path)])
+    assert result.exit_code == 0
+    assert started[0].settings == tui.Settings("bin-packed", "75", "60")
+
+
+def test_render_rejects_unknown_formats():
+    with pytest.raises(ValueError, match="Unknown format: yaml"):
+        render("yaml", {})
 
 
 def test_estimate_help_leaves_out_the_region_choices():
