@@ -82,6 +82,42 @@ A cluster usually runs short of one resource while the other sits partly idle, s
 
 Bin-packed estimates use GCP's per-vCPU and per-GiB prices for each machine family. GPU machine types (`a2`, `g2`) also pay for their GPUs, and shared-core types (`f1-micro`, `g1-small`, `e2-micro`, `e2-small`, `e2-medium`) for a fraction of a vCPU, so those only get whole-node estimates.
 
+### JSON output and custom formats
+
+`--format json` prints the whole estimate as one JSON object, for scripts or to format the output your own way with [`jq`](https://jqlang.org/). The most useful fields are:
+
+- `required_instance_count` and `constrained_resource`: how many whole nodes the change needs, and whether `cores` or `memory` decides it
+- `costs`: the whole-node cost, `hourly`, `monthly` and `yearly`, with its cost `class` and `region`
+- `resource_costs`: the bin-packed cost, with `hourly`, `monthly` and `yearly` costs for `cores`, `memory` and the `total`. It's `null` when the instance type's price can't be split into CPU and memory, as for GPU machine types.
+- `delta_cpu` and `delta_mem`: the total change, in milli-cores and MiB
+
+To pick out a few fields:
+
+    $ uvx skrooge estimate --replicas 1000 --cpu 5810 --mem 9950 --instance n2-highcpu-64 --format json \
+        | jq '{nodes: .required_instance_count, constrained_resource, whole_nodes: .costs.monthly, bin_packed: .resource_costs.total.monthly}'
+    {
+      "nodes": 152,
+      "constrained_resource": "memory",
+      "whole_nodes": 203658,
+      "bin_packed": 131300
+    }
+
+To print a line in your own format:
+
+    $ uvx skrooge estimate --replicas 1000 --cpu 5810 --mem 9950 --instance n2-highcpu-64 --format json \
+        | jq -r '"\(.replicas) replicas on \(.instance) in \(.region): \(.required_instance_count) nodes, $\(.costs.monthly)/month at \(.costs.class) rates"'
+    1000 replicas on n2-highcpu-64 in us-central1: 152 nodes, $203658/month at sud rates
+
+To compare cost classes as CSV, for a spreadsheet, with the monthly whole-node and bin-packed costs:
+
+    $ for class in ondemand sud cud-1y cud-3y; do
+        uvx skrooge estimate --replicas 1000 --cpu 5810 --mem 9950 --instance n2-highcpu-64 --cost-class "$class" --format json
+      done | jq -r '[.costs.class, .costs.monthly, .resource_costs.total.monthly] | @csv'
+    "ondemand",254572,164126
+    "sud",203658,131300
+    "cud-1y",160379,103397
+    "cud-3y",114561,73859
+
 ### Interactive mode
 
 `skrooge tui` opens a terminal UI where you can change every input and watch the estimate update as you type. You can estimate several workloads at once and see the net change across all of them, and the selected workload's cost at every pricing tier side by side:
