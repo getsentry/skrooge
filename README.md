@@ -188,8 +188,8 @@ Or, for a canny Scot's view, `--format mcduck` has Scrooge McDuck tally it up fr
                                |       |
                              __|_______|__
                               /         \
-                             /  (o)      \
-                      ______/   /         |~~
+                             /   o       \
+                      ___(O)/   /         |~~
                      (______    (         |~~~
                       \_____`.   \        /~~
                              `-----.____.'
