@@ -118,6 +118,48 @@ To compare cost classes as CSV, for a spreadsheet, with the monthly whole-node a
     "cud-1y",160379,103397
     "cud-3y",114561,73859
 
+### A word from Mr. Scrooge
+
+For a second opinion, `--format scrooge` has Ebenezer Scrooge himself read you the estimate. His temper depends on the monthly whole-node cost:
+
+    $ uvx skrooge estimate --replicas 1000 --cpu 5810 --mem 9950 --instance n2-highcpu-64 --format scrooge
+     ___________________________________________________________
+    / BAH! HUMBUG! Wouldst thou see me in the poorhouse?        \
+    |                                                           |
+    | Thy 1,000 replicas upon n2-highcpu-64 in us-central1 do   |
+    | want 5,810 cores and 9,716.8 GiB of memory, and 'tis the  |
+    | memory that bindeth thee.                                 |
+    |                                                           |
+    | 152 whole nodes thou must have, at sud rates: $278.98 the |
+    | hour, $203,658 the month, and $2,443,898 the year!        |
+    |                                                           |
+    | Packed as tight as the coins in my strongbox, at 100%     |
+    | efficiency, 'twould be $131,300 the month and $1,575,609  |
+    | the year.                                                 |
+    |                                                           |
+    | And if thou art shrinking it, these be thy savings, and   |
+    | the first good news I have had all day.                   |
+    |                                                           |
+    | Are there no prisons? Are there no workhouses? Shrink it, |
+    \ I say, shrink it!                                         /
+     -----------------------------------------------------------
+               \
+                \       _.-""""-._
+                 \    .'          `-._
+                     /                `-._
+                    /  .------------.     `-.
+                   |  /              \       (@)
+                   | |   ___    ___   |
+                   | |  ( o )--( o )  |
+                  (| |       \        |)
+                  (| |        \       |)       )
+                   \\|       __)      |/      (
+                    \|                |      (_)
+                     |     .----.     |      |=|
+                     |    /      \    |      |=|
+                      \              /     __|=|__
+                       `-.________.-'     (_______)
+
 ### Interactive mode
 
 `skrooge tui` opens a terminal UI where you can change every input and watch the estimate update as you type. You can estimate several workloads at once and see the net change across all of them, and the selected workload's cost at every pricing tier side by side:
@@ -236,7 +278,8 @@ Options:
   --mem-packing-efficiency INTEGER RANGE
                                   Like --packing-efficiency, for memory only.
                                   Default: --packing-efficiency  [1<=x<=100]
-  -f, --format [english|json]     The output format. Default: english
+  -f, --format [english|json|scrooge]
+                                  The output format. Default: english
   --help                          Show this message and exit.
 ```
 ```
