@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-28
+
 ### Added
 
 - `--format scrooge` and `--format mcduck`, which have an ASCII Ebenezer Scrooge (in olde English) or Scrooge McDuck (in a Scots brogue, from his money bin) read you the estimate, more or less grumpily depending on the cost
@@ -14,9 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `skrooge tui`, an interactive terminal UI that updates estimates live as you edit inputs, handles several workloads at once with a net total, and saves them to a JSON file. You enter each workload's replicas, CPU and memory before and after the change, and it works out the change. It also compares the workload's machine type with the others of its size in its family, such as `n2-highcpu-32` for a CPU-bound workload on `n2-standard-32`, and copies the workloads table as Markdown.
 - Bin-packed estimates, which charge a workload for just the CPU and memory it requests at per-vCPU and per-GiB prices, for large shared clusters. `estimate` prints one alongside the whole-node estimate (and adds `packing_efficiency`, `resource_prices`, and `resource_costs` to `--format json`), and the TUI can switch between the two
 - `--packing-efficiency` (`-p`), and matching TUI settings, to account for how full a cluster's nodes are in bin-packed estimates. `--cpu-packing-efficiency` and `--mem-packing-efficiency` set it for each resource separately.
-- `c4d`, `n4d` and `n4a` machine types, once `instances.json` is next regenerated
+- `c4d`, `n4d` and `n4a` machine types
+- Pricing for the `asia-southeast3`, `europe-north2`, `europe-west5`, `northamerica-south1`, `us-east7` and `us-west8` regions
 - `regions` command, which lists the regions skrooge has pricing for, optionally only for an `--instance` type and `--cost-class`. When an instance type has no pricing in the chosen region and cost class, `estimate` suggests the matching `regions` command.
 - The README's usage section includes the `--help` output for every command, generated with cog and checked in CI
+- The README documents `--format json` and how to make custom output formats with `jq`
 
 ### Changed
 
@@ -25,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires Click 8.2 or newer
 - The error for an unknown instance type links to a new issue form for missing instance types, with the machine type and skrooge version filled in, instead of a `BUG_REPORT.md` template that isn't in this repository
 - The price scraper now reads prices from GCP's Cloud Billing Catalog API, as the pricing calculator price list it used is gone. A daily workflow opens a pull request when prices change, with a report of what changed.
+- Updated GCP prices
 
 ## [1.1.0] - 2026-10-22
 
@@ -73,7 +78,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial commit.
 
-[unreleased]: https://github.com/getsentry/skrooge/compare/1.1.0...HEAD
+[unreleased]: https://github.com/getsentry/skrooge/compare/1.2.0...HEAD
+[1.2.0]: https://github.com/getsentry/skrooge/compare/1.1.0...1.2.0
 [1.1.0]: https://github.com/getsentry/skrooge/releases/tag/1.1.0
 [1.0.2]: https://github.com/getsentry/skrooge/compare/1.0.1...1.0.2
 [1.0.1]: https://github.com/getsentry/skrooge/compare/1.0.0...1.0.1
