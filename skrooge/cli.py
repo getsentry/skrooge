@@ -102,7 +102,7 @@ def cli():
     "-f",
     "--format",
     help="The output format. Default: english",
-    type=click.Choice(["english", "json", "scrooge"], case_sensitive=False),
+    type=click.Choice(["english", "json", "scrooge", "mcduck"], case_sensitive=False),
     default="english",
 )
 def estimate(

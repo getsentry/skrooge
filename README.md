@@ -118,7 +118,7 @@ To compare cost classes as CSV, for a spreadsheet, with the monthly whole-node a
     "cud-1y",160379,103397
     "cud-3y",114561,73859
 
-### A word from Mr. Scrooge
+### A word from the Scrooges
 
 For a second opinion, `--format scrooge` has Ebenezer Scrooge himself read you the estimate. His temper depends on the monthly whole-node cost:
 
@@ -159,6 +159,44 @@ For a second opinion, `--format scrooge` has Ebenezer Scrooge himself read you t
                      |    /      \    |      |=|
                       \              /     __|=|__
                        `-.________.-'     (_______)
+
+Or, for a canny Scot's view, `--format mcduck` has Scrooge McDuck tally it up from his money bin:
+
+    $ uvx skrooge estimate --replicas 30 --cpu 2500 --mem 2024 --instance n2-standard-32 --format mcduck
+     ____________________________________________________________
+    / Bless me bagpipes! Ye want HOW much?                       \
+    |                                                            |
+    | Yer 30 replicas on n2-standard-32 in us-central1 want 75   |
+    | cores and 59.3 GiB o' memory, and it's the cores that's    |
+    | got ye by the sporran.                                     |
+    |                                                            |
+    | That's 3 whole nodes at sud rates: $3.73 an hour, $2,722 a |
+    | month, and $32,669 a year!                                 |
+    |                                                            |
+    | Packed as tight as the coins in me money bin, at 100%      |
+    | efficiency, it'd be $1,532 a month and $18,376 a year.     |
+    |                                                            |
+    | And if ye're shrinkin' it, those are yer savings, and      |
+    | that's music tae me ears!                                  |
+    |                                                            |
+    | Be tougher than the toughies and smarter than the          |
+    \ smarties, and ye'll no' need sae many nodes!               /
+     ------------------------------------------------------------
+               \
+                \         _______
+                 \       |       |
+                         |       |
+                       __|_______|__
+                        .-'     `-.
+                       /           \
+                      |  (o)---(o)  |
+                   ~~~|      |      |~~~
+                      | .---------. |         ____
+                      |(___________)|       _(____)_
+                       \           /       /   $    \
+                        `-._____.-'       |    $     |
+                       ___|  >o<  |___     \________/
+                      /   |       |   \
 
 ### Interactive mode
 
@@ -278,7 +316,7 @@ Options:
   --mem-packing-efficiency INTEGER RANGE
                                   Like --packing-efficiency, for memory only.
                                   Default: --packing-efficiency  [1<=x<=100]
-  -f, --format [english|json|scrooge]
+  -f, --format [english|json|scrooge|mcduck]
                                   The output format. Default: english
   --help                          Show this message and exit.
 ```

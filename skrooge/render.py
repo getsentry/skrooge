@@ -22,9 +22,27 @@ SCROOGE = r'''
                    `-.________.-'     (_______)
 '''.strip("\n")
 
-# Scrooge's mood by the whole-node monthly cost: the cost it's for (up to, but not
-# including), his opening words, and his parting words
-MOODS = [
+MCDUCK = r"""
+           \
+            \         _______
+             \       |       |
+                     |       |
+                   __|_______|__
+                    .-'     `-.
+                   /           \
+                  |  (o)---(o)  |
+               ~~~|      |      |~~~
+                  | .---------. |         ____
+                  |(___________)|       _(____)_
+                   \           /       /   $    \
+                    `-._____.-'       |    $     |
+                   ___|  >o<  |___     \________/
+                  /   |       |   \
+""".strip("\n")
+
+# Each character's mood by the whole-node monthly cost: the cost it's for (up to, but
+# not including), their opening words, and their parting words
+SCROOGE_MOODS = [
     (
         1000,
         "Hmph. A trifle, I grant thee, but a trifle is still a coin out of my purse.",
@@ -41,6 +59,23 @@ MOODS = [
         "Are there no prisons? Are there no workhouses? Shrink it, I say, shrink it!",
     ),
 ]
+MCDUCK_MOODS = [
+    (
+        1000,
+        "Och, a wee sum, I'll grant ye. But I didnae make me fortune by tossin' wee sums aboot!",
+        "Mind ye, a penny saved is a penny I keep. Now off wi' ye!",
+    ),
+    (
+        100000,
+        "Bless me bagpipes! Ye want HOW much?",
+        "Be tougher than the toughies and smarter than the smarties, and ye'll no' need sae many nodes!",
+    ),
+    (
+        float("inf"),
+        "Curse me kilts! That's enough tae drain me money bin!",
+        "I'll be divin' intae me money bin tae count what's left. Shrink it, ye scallywag!",
+    ),
+]
 
 
 def render(format, data):
@@ -50,6 +85,8 @@ def render(format, data):
         render_json(data)
     elif format == "scrooge":
         render_scrooge(data)
+    elif format == "mcduck":
+        render_mcduck(data)
     else:
         raise ValueError(f"Unknown format: {format}")
 
@@ -87,31 +124,61 @@ def render_json(data):
 
 
 def render_scrooge(data):
-    click.echo(speech_bubble(scrooge_speech(data)))
-    click.echo(SCROOGE)
+    render_character(scrooge_speech(data), SCROOGE)
+
+
+def render_mcduck(data):
+    render_character(mcduck_speech(data), MCDUCK)
+
+
+def render_character(speech, art):
+    click.echo(speech_bubble(speech))
+    click.echo(art)
+
+
+def spoken(data):
+    "The estimate's amounts, as a character says them"
+    costs = data["costs"]
+    resource_costs = data["resource_costs"]
+    return {
+        "replicas": f"{data['replicas']:,}",
+        "nodes": f"{data['required_instance_count']:,}",
+        "cores": number(data["delta_cpu"] / 1000),
+        "memory": number(data["delta_mem"] / 1024),
+        "hourly": coins(costs["hourly"], 2),
+        "monthly": coins(costs["monthly"]),
+        "yearly": coins(costs["yearly"]),
+        # The bin-packed costs, if there are any
+        "packed": resource_costs
+        and {
+            period: coins(resource_costs["total"][period])
+            for period in ("monthly", "yearly")
+        },
+    }
+
+
+def mood(moods, data):
+    "A character's opening and parting words for the estimate"
+    return next(
+        (opening, closing)
+        for up_to, opening, closing in moods
+        if data["costs"]["monthly"] < up_to
+    )
 
 
 def scrooge_speech(data):
     "What Scrooge has to say about the estimate, as a list of paragraphs"
-    costs = data["costs"]
-    opening, closing = next(
-        (opening, closing)
-        for up_to, opening, closing in MOODS
-        if costs["monthly"] < up_to
-    )
-    replicas = data["replicas"]
-    nodes = data["required_instance_count"]
-    cores = number(data["delta_cpu"] / 1000)
+    opening, closing = mood(SCROOGE_MOODS, data)
+    said = spoken(data)
+    replicas, nodes, cores = said["replicas"], said["nodes"], said["cores"]
     speech = [
         opening,
-        f"Thy {replicas:,} {plural(replicas, 'replica')} upon {data['instance']} in {data['region']} {'doth' if replicas == 1 else 'do'} want {cores} {plural(cores, 'core')} and {number(data['delta_mem'] / 1024)} GiB of memory, and 'tis the {data['constrained_resource']} that bindeth thee.",
-        f"{nodes:,} whole {plural(nodes, 'node')} thou must have, at {costs['class']} rates: {coins(costs['hourly'], 2)} the hour, {coins(costs['monthly'])} the month, and {coins(costs['yearly'])} the year!",
+        f"Thy {replicas} {plural(replicas, 'replica')} upon {data['instance']} in {data['region']} {'doth' if replicas == '1' else 'do'} want {cores} {plural(cores, 'core')} and {said['memory']} GiB of memory, and 'tis the {data['constrained_resource']} that bindeth thee.",
+        f"{nodes} whole {plural(nodes, 'node')} thou must have, at {data['costs']['class']} rates: {said['hourly']} the hour, {said['monthly']} the month, and {said['yearly']} the year!",
     ]
-    resource_costs = data["resource_costs"]
-    if resource_costs:
-        total = resource_costs["total"]
+    if said["packed"]:
         speech.append(
-            f"Packed as tight as the coins in my strongbox, at {efficiency_text(data['packing_efficiency'])}, 'twould be {coins(total['monthly'])} the month and {coins(total['yearly'])} the year."
+            f"Packed as tight as the coins in my strongbox, at {efficiency_text(data['packing_efficiency'])}, 'twould be {said['packed']['monthly']} the month and {said['packed']['yearly']} the year."
         )
     else:
         speech.append(
@@ -119,6 +186,31 @@ def scrooge_speech(data):
         )
     speech += [
         "And if thou art shrinking it, these be thy savings, and the first good news I have had all day.",
+        closing,
+    ]
+    return speech
+
+
+def mcduck_speech(data):
+    "What Scrooge McDuck has to say about the estimate, as a list of paragraphs"
+    opening, closing = mood(MCDUCK_MOODS, data)
+    said = spoken(data)
+    replicas, nodes, cores = said["replicas"], said["nodes"], said["cores"]
+    speech = [
+        opening,
+        f"Yer {replicas} {plural(replicas, 'replica')} on {data['instance']} in {data['region']} {'wants' if replicas == '1' else 'want'} {cores} {plural(cores, 'core')} and {said['memory']} GiB o' memory, and it's the {data['constrained_resource']} that's got ye by the sporran.",
+        f"That's {nodes} whole {plural(nodes, 'node')} at {data['costs']['class']} rates: {said['hourly']} an hour, {said['monthly']} a month, and {said['yearly']} a year!",
+    ]
+    if said["packed"]:
+        speech.append(
+            f"Packed as tight as the coins in me money bin, at {efficiency_text(data['packing_efficiency'])}, it'd be {said['packed']['monthly']} a month and {said['packed']['yearly']} a year."
+        )
+    else:
+        speech.append(
+            f"I cannae split {data['instance']}'s price intae cores and memory, so there's nae cheaper sum for ye."
+        )
+    speech += [
+        "And if ye're shrinkin' it, those are yer savings, and that's music tae me ears!",
         closing,
     ]
     return speech
