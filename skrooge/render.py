@@ -67,7 +67,7 @@ def render_autoscaling_english(data):
 
 def scaling_pattern_text(pattern):
     if is_percentage_pattern(pattern):
-        return f"Running a steady {pattern} of its max replicas"
+        return f"At max replicas {pattern} of the time and min the rest"
     return f"With the {pattern} scaling pattern ({SCALING_PATTERNS[pattern]['description']})"
 
 

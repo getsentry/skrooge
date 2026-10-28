@@ -601,7 +601,7 @@ def test_autoscaling_estimate_in_json(instance_data):
         ),
         (
             ["--min-replicas", "1", "--max-replicas", "5", "--scaling-pattern", "x"],
-            "'x' is not one of 'business-hours', 'daytime', 'diurnal', 'hourly-spikes', or a percentage like '60%'.",
+            "'x' is not one of 'business-hours', 'daytime', 'diurnal', 'hourly-spikes', or a percentage like '25%'.",
         ),
         (
             ["--min-replicas", "1", "--max-replicas", "5", "--scaling-pattern", "150%"],
@@ -618,15 +618,16 @@ def test_invalid_autoscaling_options(args, error):
     assert error in " ".join(result.output.split())
 
 
-@pytest.mark.parametrize("pattern", ["60%", "60", "60.0%"])
+@pytest.mark.parametrize("pattern", ["25%", "25", "25.0%"])
 def test_autoscaling_estimate_with_a_percentage(instance_data, pattern):
     result = CliRunner().invoke(cli, [*AUTOSCALING_ARGS, "--scaling-pattern", pattern])
     assert result.exit_code == 0, result.output
     assert (
-        "Running a steady 60% of its max replicas, this workload will average 18 replicas on 2 instances, costing $2.49/h (or $1815/m (or $21779/y)) at sud rates."
+        # 30 replicas on 3 nodes a quarter of the time, and 2 on 1 the rest
+        "At max replicas 25% of the time and min the rest, this workload will average 9.0 replicas on 1.5 instances, costing $1.86/h (or $1361/m (or $16334/y)) at sud rates."
         in result.output
     )
     result = CliRunner().invoke(
         cli, [*AUTOSCALING_ARGS, "--scaling-pattern", pattern, "-f", "json"]
     )
-    assert json.loads(result.output)["autoscaling"]["scaling_pattern"] == "60%"
+    assert json.loads(result.output)["autoscaling"]["scaling_pattern"] == "25%"

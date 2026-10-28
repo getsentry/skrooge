@@ -722,34 +722,28 @@ def test_autoscaling_estimate_without_resource_prices():
 
 
 @pytest.mark.parametrize(
-    ("pattern", "min_replicas", "replicas"),
+    ("pattern", "shares"),
     [
-        # The issue's example: 60% of 10 replicas
-        ("60%", 1, 6),
-        ("33.3%", 1, 4),
-        ("100%", 1, 10),
-        # Never fewer than min replicas
-        ("20%", 5, 5),
-        ("0%", 0, 0),
+        ("25%", {10: 0.25, 1: 0.75}),
+        ("0%", {10: 0, 1: 1}),
+        ("100%", {10: 1, 1: 0}),
     ],
 )
-def test_percentage_pattern_runs_steady_replicas(pattern, min_replicas, replicas):
-    assert replicas_shares(pattern, min_replicas, 10) == {replicas: 1}
+def test_percentage_pattern_is_the_time_at_max_replicas(pattern, shares):
+    assert replicas_shares(pattern, 1, 10) == pytest.approx(shares)
+
+
+def test_percentage_pattern_with_fixed_replicas():
+    assert replicas_shares("25%", 5, 5) == pytest.approx({5: 1})
 
 
 def test_autoscaling_estimate_with_a_percentage():
-    data = web_autoscaling_estimate(scaling_pattern="60%")
-    assert data["replicas"] == 18
-    # 45 cores on 32-core nodes
-    assert data["required_instance_count"] == 2
-    steady = calculate_estimate(
-        INSTANCE_TYPES,
-        "n2-standard-32",
-        18,
-        cpu=2500,
-        mem=2024,
-        cost_class="sud",
-        region="us-central1",
+    data = web_autoscaling_estimate(scaling_pattern="25%")
+    assert data["replicas"] == 9
+    # 3 nodes a quarter of the time, and 1 the rest
+    assert data["required_instance_count"] == 1.5
+    # Matches a named pattern with as much time at max
+    assert (
+        web_autoscaling_estimate(scaling_pattern="33.333333%")["costs"]
+        == web_autoscaling_estimate(scaling_pattern="hourly-spikes")["costs"]
     )
-    assert data["costs"] == steady["costs"]
-    assert data["resource_costs"] == steady["resource_costs"]

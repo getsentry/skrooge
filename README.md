@@ -92,11 +92,11 @@ For a deployment that autoscales, pass the fewest and most replicas you expect i
 | `daytime` | Max from 08:00 to 18:00 every day, min overnight | 42% |
 | `diurnal` | A smooth daily curve from min at night to max in the afternoon | Averages halfway |
 | `hourly-spikes` | Max for 20 minutes of every hour, like hourly batch jobs, min the rest of the time | 33% |
-| A percentage, like `60%` | That percentage of max, rounded up, all the time, but never fewer than min | |
+| A percentage, like `25%` | Max for that share of the time, min the rest | That percentage |
 
 The cluster autoscaler adds and removes whole nodes as replicas come and go, so the average whole-node cost is the average of the nodes needed at each point in the week. Between min and max, replicas are rounded up, as the Horizontal Pod Autoscaler does. Use 0 for `--min-replicas` for a workload that scales to zero.
 
-If you know a deployment's average replicas as a share of its max, pass that as the pattern instead. Between 1 and 10 replicas, `--scaling-pattern 60%` estimates 6 replicas all the time.
+If none of the patterns fit, pass the share of the time the deployment spends at max replicas, like `--scaling-pattern 25%`. For a deployment that holds steady at some number of replicas, use `--replicas` instead.
 
     $ uvx skrooge estimate --min-replicas 2 --max-replicas 30 --cpu 2500 --mem 2024 --instance n2-standard-32
     This workload is running on n2-standard-32 instances in us-central1 with 32 cores and 128GiB of memory.
@@ -107,7 +107,7 @@ If you know a deployment's average replicas as a share of its max, pass that as 
 
 The patterns are rough shapes, not your traffic, and the cluster autoscaler waits about 10 minutes before removing a node that's no longer needed, so short spikes cost a little more on whole nodes than estimated.
 
-With `--format json`, `replicas`, `required_instance_count`, `costs` and `resource_costs` are the weekly averages, and `autoscaling` holds the `scaling_pattern` (a pattern's name, or a percentage like `"60%"`), `min_replicas` and `max_replicas`, and the estimates at each end in `min` and `max`.
+With `--format json`, `replicas`, `required_instance_count`, `costs` and `resource_costs` are the weekly averages, and `autoscaling` holds the `scaling_pattern` (a pattern's name, or a percentage like `"25%"`), `min_replicas` and `max_replicas`, and the estimates at each end in `min` and `max`.
 
 ### JSON output and custom formats
 
@@ -249,8 +249,9 @@ Options:
   --scaling-pattern [business-hours|daytime|diurnal|hourly-spikes|N%]
                                   How an autoscaling deployment's replicas
                                   vary over a week, for its average cost, or
-                                  the percentage of --max-replicas it runs all
-                                  the time, like 60%. Default: business-hours
+                                  the percentage of the time at max replicas,
+                                  like 25%, with min replicas the rest.
+                                  Default: business-hours
   -c, --cpu INTEGER               The amount of CPU change in milli-cores
                                   [required]
   -m, --mem INTEGER               The amount of memory change in MiB

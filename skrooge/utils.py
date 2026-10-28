@@ -421,15 +421,16 @@ def is_percentage_pattern(scaling_pattern):
 def replicas_shares(scaling_pattern, min_replicas, max_replicas):
     """How much of the week a workload runs each number of replicas, as {replicas: share}
 
-    scaling_pattern is a name in SCALING_PATTERNS, or a percentage of max_replicas
-    like "60%" for a workload that runs that many replicas all the time.
+    scaling_pattern is a name in SCALING_PATTERNS, or a percentage like "25%" for a
+    workload that runs max_replicas that share of the time and min_replicas the rest.
     """
     if is_percentage_pattern(scaling_pattern):
-        percentage = float(scaling_pattern.removesuffix("%"))
-        replicas = math.ceil(round(percentage * max_replicas / 100, 6))
-        return {max(min_replicas, replicas): 1}
+        at_max = float(scaling_pattern.removesuffix("%")) / 100
+        levels = [(at_max, 1), (1 - at_max, 0)]
+    else:
+        levels = SCALING_PATTERNS[scaling_pattern]["levels"]
     shares = {}
-    for share, load in SCALING_PATTERNS[scaling_pattern]["levels"]:
+    for share, load in levels:
         replicas = replicas_at(load, min_replicas, max_replicas)
         shares[replicas] = shares.get(replicas, 0) + share
     return shares

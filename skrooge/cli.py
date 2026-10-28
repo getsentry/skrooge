@@ -36,7 +36,7 @@ class RegionChoice(click.Choice):
 
 
 class ScalingPattern(click.Choice):
-    "A choice of scaling pattern, or a percentage of max replicas like 60%"
+    "A choice of scaling pattern, or the percentage of the time at max replicas, like 25%"
 
     def convert(self, value, param, ctx):
         try:
@@ -48,7 +48,7 @@ class ScalingPattern(click.Choice):
         return f"{percentage:g}%"
 
     def get_invalid_choice_message(self, value, ctx):
-        return f"{super().get_invalid_choice_message(value, ctx).removesuffix('.')}, or a percentage like '60%'."
+        return f"{super().get_invalid_choice_message(value, ctx).removesuffix('.')}, or a percentage like '25%'."
 
 
 @click.group()
@@ -77,7 +77,7 @@ def cli():
 )
 @click.option(
     "--scaling-pattern",
-    help=f"How an autoscaling deployment's replicas vary over a week, for its average cost, or the percentage of --max-replicas it runs all the time, like 60%. Default: {DEFAULT_SCALING_PATTERN}",
+    help=f"How an autoscaling deployment's replicas vary over a week, for its average cost, or the percentage of the time at max replicas, like 25%, with min replicas the rest. Default: {DEFAULT_SCALING_PATTERN}",
     type=ScalingPattern(list(SCALING_PATTERNS), case_sensitive=False),
     metavar=f"[{'|'.join(SCALING_PATTERNS)}|N%]",
 )
