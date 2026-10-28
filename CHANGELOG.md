@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `estimate --help` no longer lists every `--region` choice; use `skrooge regions` instead
 - An invalid `--region` suggests similar regions instead of listing all of them
 - Requires Click 8.2 or newer
+- The error for an unknown instance type links to a new issue form for missing instance types, with the machine type and skrooge version filled in, instead of a `BUG_REPORT.md` template that isn't in this repository
 - The price scraper now reads prices from GCP's Cloud Billing Catalog API, as the pricing calculator price list it used is gone. A daily workflow opens a pull request when prices change, with a report of what changed.
 
 ## [1.1.0] - 2026-10-22

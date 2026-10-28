@@ -4,6 +4,8 @@ import json
 import logging
 import math
 import re
+import urllib.parse
+from importlib.metadata import PackageNotFoundError, version
 from importlib.resources import files
 
 from .machine_types import GPUS
@@ -26,7 +28,7 @@ SHARED_CORE_INSTANCE_TYPES = {
     "e2-medium",
 }
 
-MISSING_INSTANCE_TYPE_LINK = "https://github.com/getsentry/skrooge/issues/new?assignees=&labels=&projects=&template=BUG_REPORT.md"
+MISSING_INSTANCE_TYPE_TEMPLATE = "missing-instance-type.yml"
 
 
 class EstimateError(ValueError):
@@ -83,6 +85,23 @@ def instance_names(instance_types):
     ]
 
 
+def missing_instance_type_link(instance):
+    "Link to a new issue asking for the instance type, with the issue form filled in"
+    # The keys other than template and title are the form's field ids
+    params = {
+        "template": MISSING_INSTANCE_TYPE_TEMPLATE,
+        "title": f"Add instance type: {instance}",
+        "instance-type": instance,
+    }
+    try:
+        params["version"] = version("skrooge")
+    except PackageNotFoundError:
+        pass
+    return "https://github.com/getsentry/skrooge/issues/new?" + urllib.parse.urlencode(
+        params
+    )
+
+
 def find_instance_data(instance_types, instance):
     instance_family = instance.split("-")[0]
     try:
@@ -96,14 +115,14 @@ def find_instance_data(instance_types, instance):
             instance_family, instance_types.keys(), cutoff=0.4
         )
         raise InstanceNotFoundError(
-            f"{instance_family} instance family not found. Did you mean: {', '.join(close_matches)}\nMissing an instance family that exists? {MISSING_INSTANCE_TYPE_LINK}"
+            f"{instance_family} instance family not found. Did you mean: {', '.join(close_matches)}\nMissing an instance family that exists? {missing_instance_type_link(instance)}"
         )
 
     close_matches = difflib.get_close_matches(
         instance, instance_types[instance_family].keys()
     )
     raise InstanceNotFoundError(
-        f"{instance} not found. Did you mean: {', '.join(close_matches)}\nMissing an instance type that exists? {MISSING_INSTANCE_TYPE_LINK}"
+        f"{instance} not found. Did you mean: {', '.join(close_matches)}\nMissing an instance type that exists? {missing_instance_type_link(instance)}"
     )
 
 

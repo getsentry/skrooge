@@ -1,0 +1,35 @@
+name: Missing instance type
+description: Ask for a GCP machine type or family that skrooge doesn't know about
+title: "Add instance type: "
+labels: ["Improvement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        skrooge can only estimate the machine types in its bundled data. Their specs are listed in [`skrooge/machine_types.py`](https://github.com/getsentry/skrooge/blob/main/skrooge/machine_types.py), and their prices come from GCP's Cloud Billing Catalog API, which is checked for new prices daily. If you're not on the latest release, try `uvx skrooge@latest` first.
+
+        The link in skrooge's error fills in the machine type and your skrooge version.
+  - type: input
+    id: instance-type
+    attributes:
+      label: Machine type
+      description: The machine type skrooge didn't find.
+      placeholder: n2-standard-32
+    validations:
+      required: true
+  - type: input
+    id: docs
+    attributes:
+      label: GCP documentation
+      description: A link to GCP's documentation for the machine type or its family, if you have one.
+      placeholder: https://cloud.google.com/compute/docs/general-purpose-machines
+  - type: input
+    id: version
+    attributes:
+      label: skrooge version
+      description: The output of `skrooge --version`.
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: For example, what you're trying to estimate, or the regions you need prices for.

@@ -1,8 +1,12 @@
 import json
+import re
+import urllib.parse
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import pytest
 
+from skrooge import utils
 from skrooge.utils import (
     InstanceNotFoundError,
     PricingNotFoundError,
@@ -13,6 +17,7 @@ from skrooge.utils import (
     find_instance_data,
     hourly_price,
     instance_names,
+    missing_instance_type_link,
     resource_prices,
 )
 
@@ -434,6 +439,47 @@ def test_find_instance_data_suggests_instance_families():
         InstanceNotFoundError, match="n9 instance family not found. Did you mean"
     ):
         find_instance_data(INSTANCE_TYPES, "n9-standard-32")
+
+
+@pytest.mark.parametrize("instance", ["n2-standard-33", "n9-standard-32"])
+def test_find_instance_data_links_to_the_issue_form(instance):
+    with pytest.raises(InstanceNotFoundError) as error:
+        find_instance_data(INSTANCE_TYPES, instance)
+    assert missing_instance_type_link(instance) in str(error.value)
+
+
+def test_missing_instance_type_link_fills_in_the_issue_form():
+    url = urllib.parse.urlsplit(missing_instance_type_link("n2-standard-33"))
+    assert url.geturl().startswith("https://github.com/getsentry/skrooge/issues/new?")
+    assert urllib.parse.parse_qs(url.query) == {
+        "template": ["missing-instance-type.yml"],
+        "title": ["Add instance type: n2-standard-33"],
+        "instance-type": ["n2-standard-33"],
+        "version": [version("skrooge")],
+    }
+
+
+def test_missing_instance_type_link_without_a_version(monkeypatch):
+    def not_installed(name):
+        raise PackageNotFoundError(name)
+
+    monkeypatch.setattr(utils, "version", not_installed)
+    query = urllib.parse.urlsplit(missing_instance_type_link("n2-standard-33")).query
+    assert "version" not in urllib.parse.parse_qs(query)
+
+
+def test_missing_instance_type_link_matches_the_issue_form():
+    template = (
+        Path(__file__).parent.parent
+        / ".github"
+        / "ISSUE_TEMPLATE"
+        / utils.MISSING_INSTANCE_TYPE_TEMPLATE
+    ).read_text()
+    field_ids = re.findall(r"^\s+id: (\S+)$", template, re.MULTILINE)
+    query = urllib.parse.urlsplit(missing_instance_type_link("n2-standard-33")).query
+    filled_in = set(urllib.parse.parse_qs(query)) - {"template", "title"}
+    assert filled_in
+    assert filled_in <= set(field_ids)
 
 
 def test_instance_names_skip_keys_that_arent_families():
