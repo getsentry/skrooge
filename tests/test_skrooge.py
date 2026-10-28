@@ -6,7 +6,7 @@ from click.testing import CliRunner
 from skrooge import cli as cli_module
 from skrooge import tui, utils
 from skrooge.cli import cli
-from skrooge.render import render
+from skrooge.render import mcduck_speech, render, scrooge_speech
 
 REQUIRED_ARGS = ["--replicas", "30", "--cpu", "2500", "--mem", "2024"]
 
@@ -412,6 +412,20 @@ def test_bin_packed_estimate_in_json(instance_data):
     assert data["resource_costs"]["total"]["monthly"] == 1532
 
 
+def test_scrooge_format(instance_data):
+    result = CliRunner().invoke(cli, [*WEB_ARGS, "--format", "SCROOGE"])
+    assert result.exit_code == 0
+    assert "Thy 30 replicas upon n2-standard-32" in result.output
+    assert "(_______)" in result.output
+
+
+def test_mcduck_format(instance_data):
+    result = CliRunner().invoke(cli, [*WEB_ARGS, "--format", "mcduck"])
+    assert result.exit_code == 0
+    assert "Yer 30 replicas on n2-standard-32" in result.output
+    assert "<___| <__|" in result.output
+
+
 def test_packing_efficiency_by_resource(instance_data):
     # -p sets both, and the per-resource options override it
     result = CliRunner().invoke(
@@ -564,6 +578,64 @@ def test_autoscaling_estimate_without_bin_packed_estimate(instance_data):
     )
     assert result.exit_code == 0, result.output
     assert "skrooge can't split n1-highcpu-16 pricing" in result.output
+
+
+def autoscaling_estimate(*args):
+    result = CliRunner().invoke(cli, [*AUTOSCALING_ARGS, *args, "-f", "json"])
+    assert result.exit_code == 0, result.output
+    return json.loads(result.output)
+
+
+def test_scrooge_speech_for_autoscaling_estimate(instance_data):
+    assert scrooge_speech(autoscaling_estimate()) == [
+        "Bah! Humbug! Thou comest to me with thy hand out again?",
+        "Thy replicas do wax and wane betwixt 2 and 30 upon n2-standard-32 in us-central1, wanting 5 to 75 cores and 3.95 to 59.3 GiB of memory, and 'tis the cores that bindeth thee.",
+        "At sud rates, 1 whole node for 2 replicas costeth $907 the month, and 3 for 30 costeth $2,722!",
+        "By thy business-hours pattern (max replicas from 08:00 to 18:00 on weekdays, min the rest of the time), thou wilt average 10.33 replicas on 1.6 nodes: $1.98 the hour, $1,448 the month, and $17,372 the year!",
+        "Packed as tight as the coins in my strongbox, at 100% efficiency, 'twould be on average $528 the month and $6,329 the year.",
+        "And if thou art shrinking it, these be thy savings, and the first good news I have had all day.",
+        "Every penny, mark me! Every last penny!",
+    ]
+
+
+def test_mcduck_speech_for_autoscaling_estimate(instance_data):
+    assert mcduck_speech(autoscaling_estimate()) == [
+        "Bless me bagpipes! Ye want HOW much?",
+        "Yer replicas go up an' doon between 2 and 30 on n2-standard-32 in us-central1, wantin' 5 to 75 cores and 3.95 to 59.3 GiB o' memory, and it's the cores that's got ye by the sporran.",
+        "At sud rates, that's 1 whole node for 2 replicas at $907 a month, and 3 for 30 at $2,722 a month!",
+        "Wi' yer business-hours pattern (max replicas from 08:00 to 18:00 on weekdays, min the rest of the time), ye'll average 10.33 replicas on 1.6 nodes: $1.98 an hour, $1,448 a month, and $17,372 a year!",
+        "Packed as tight as the coins in me money bin, at 100% efficiency, it'd be on average $528 a month and $6,329 a year.",
+        "And if ye're shrinkin' it, those are yer savings, and that's music tae me ears!",
+        "Be tougher than the toughies and smarter than the smarties, and ye'll no' need sae many nodes!",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("speech", "reckoning"),
+    [
+        (
+            scrooge_speech,
+            "At thy most 25% of the time and thy least the rest, thou wilt average 9 replicas on 1.5 nodes:",
+        ),
+        (
+            mcduck_speech,
+            "At yer most 25% o' the time and yer least the rest, ye'll average 9 replicas on 1.5 nodes:",
+        ),
+    ],
+)
+def test_character_speech_for_percentage_scaling_pattern(
+    instance_data, speech, reckoning
+):
+    assert speech(autoscaling_estimate("--scaling-pattern", "25%"))[3].startswith(
+        reckoning
+    )
+
+
+@pytest.mark.parametrize("format", ["scrooge", "mcduck"])
+def test_autoscaling_estimate_in_character_formats(instance_data, format):
+    result = CliRunner().invoke(cli, [*AUTOSCALING_ARGS, "--format", format])
+    assert result.exit_code == 0, result.output
+    assert " 2 and 30 " in result.output
 
 
 def test_autoscaling_estimate_in_json(instance_data):
