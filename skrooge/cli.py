@@ -8,8 +8,11 @@ import click_log
 from .render import render
 from .utils import (
     COST_CLASSES,
+    DEFAULT_SCALING_PATTERN,
+    SCALING_PATTERNS,
     EstimateError,
     available_regions,
+    calculate_autoscaling_estimate,
     calculate_estimate,
     find_instance_data,
     load_instance_types,
@@ -43,9 +46,23 @@ def cli():
 @click.option(
     "-r",
     "--replicas",
-    help="The number of replicas in the deployment",
+    help="The number of replicas in the deployment. For an autoscaling one, use --min-replicas and --max-replicas instead",
     type=click.IntRange(min=1),
-    required=True,
+)
+@click.option(
+    "--min-replicas",
+    help="The fewest replicas an autoscaling deployment is expected to run",
+    type=click.IntRange(min=0),
+)
+@click.option(
+    "--max-replicas",
+    help="The most replicas an autoscaling deployment is expected to run",
+    type=click.IntRange(min=1),
+)
+@click.option(
+    "--scaling-pattern",
+    help=f"How an autoscaling deployment's replicas vary over a week, for its average cost. Default: {DEFAULT_SCALING_PATTERN}",
+    type=click.Choice(list(SCALING_PATTERNS), case_sensitive=False),
 )
 @click.option(
     "-c",
@@ -107,6 +124,9 @@ def cli():
 )
 def estimate(
     replicas,
+    min_replicas,
+    max_replicas,
+    scaling_pattern,
     cpu,
     mem,
     instance,
@@ -118,28 +138,59 @@ def estimate(
     format,
 ):
     "Quick estimate of the cost or savings a kubernetes scale update will incur"
-    logger.info(f"{replicas=}")
+    logger.info(f"{replicas=} {min_replicas=} {max_replicas=} {scaling_pattern=}")
     logger.info(f"{cpu=}m")
     logger.info(f"{mem=}MiB")
     logger.info(f"{instance=}")
 
+    autoscaling = min_replicas is not None or max_replicas is not None
+    if replicas is not None and autoscaling:
+        raise click.UsageError(
+            "Pass either --replicas, or --min-replicas and --max-replicas, not both."
+        )
+    if autoscaling and (min_replicas is None or max_replicas is None):
+        raise click.UsageError("Pass both --min-replicas and --max-replicas.")
+    if replicas is None and not autoscaling:
+        raise click.UsageError(
+            "Missing option '-r' / '--replicas' (or --min-replicas and --max-replicas)."
+        )
+    if scaling_pattern and not autoscaling:
+        raise click.UsageError(
+            "--scaling-pattern needs --min-replicas and --max-replicas."
+        )
+    if autoscaling and min_replicas > max_replicas:
+        raise click.BadParameter(
+            f"{min_replicas} is more than --max-replicas {max_replicas}.",
+            param_hint="'--min-replicas'",
+        )
+
     if cpu == 0 and mem == 0:
         raise click.BadParameter("--cpu and --mem can't both be 0.")
 
+    options = {
+        "cost_class": cost_class,
+        "region": region,
+        "packing_efficiency": {
+            "cores": cpu_packing_efficiency or packing_efficiency,
+            "memory": mem_packing_efficiency or packing_efficiency,
+        },
+    }
     try:
-        data = calculate_estimate(
-            load_instance_types(),
-            instance,
-            replicas,
-            cpu,
-            mem,
-            cost_class=cost_class,
-            region=region,
-            packing_efficiency={
-                "cores": cpu_packing_efficiency or packing_efficiency,
-                "memory": mem_packing_efficiency or packing_efficiency,
-            },
-        )
+        if autoscaling:
+            data = calculate_autoscaling_estimate(
+                load_instance_types(),
+                instance,
+                min_replicas,
+                max_replicas,
+                cpu,
+                mem,
+                scaling_pattern=scaling_pattern or DEFAULT_SCALING_PATTERN,
+                **options,
+            )
+        else:
+            data = calculate_estimate(
+                load_instance_types(), instance, replicas, cpu, mem, **options
+            )
     except EstimateError as e:
         raise click.BadParameter(str(e)) from None
 

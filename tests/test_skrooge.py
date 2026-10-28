@@ -147,7 +147,16 @@ def test_missing_required_options():
     runner = CliRunner()
     result = runner.invoke(cli, ["estimate", "--instance", "n2-standard-32"])
     assert result.exit_code == 2
-    assert "Missing option '-r' / '--replicas'" in result.output
+    assert "Missing option '-c' / '--cpu'" in result.output
+
+    result = runner.invoke(
+        cli, ["estimate", "--instance", "n2-standard-32", "-c", "100", "-m", "100"]
+    )
+    assert result.exit_code == 2
+    assert (
+        "Missing option '-r' / '--replicas' (or --min-replicas and --max-replicas)"
+        in result.output
+    )
 
 
 def test_replicas_must_be_positive():
@@ -511,3 +520,95 @@ def test_invalid_instance_family_provides_similar_families(instance_data):
     assert "n9 instance family not found. Did you mean:" in result.output
     assert "n1" in result.output
     assert "n2" in result.output
+
+
+AUTOSCALING_ARGS = [
+    "estimate",
+    "-i",
+    "n2-standard-32",
+    "-c",
+    "2500",
+    "-m",
+    "2024",
+    "--min-replicas",
+    "2",
+    "--max-replicas",
+    "30",
+]
+
+
+def test_autoscaling_estimate(instance_data):
+    result = CliRunner().invoke(cli, AUTOSCALING_ARGS)
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines()[1:] == [
+        "Autoscaling between 2 and 30 replicas, this workload will require 5.0 to 75.0 cores and 3.953125 to 59.296875 GiB of memory. This workload is cores-constrained.",
+        "At sud rates, this workload will require 1 instances at 2 replicas, costing $1.24/h (or $907/m (or $10890/y)), and 3 instances at 30 replicas, costing $3.73/h (or $2722/m (or $32669/y)).",
+        "With the business-hours scaling pattern (max replicas from 08:00 to 18:00 on weekdays, min the rest of the time), this workload will average 10.33 replicas on 1.6 instances, costing $1.98/h (or $1448/m (or $17372/y)) at sud rates.",
+        "Bin-packed in a cluster at 100% efficiency, this workload will cost $102/m at 2 replicas and $1532/m at 30, averaging $0.72/h (or $528/m (or $6329/y)): $477/m for cores and $51/m for memory.",
+    ]
+
+
+def test_autoscaling_estimate_without_bin_packed_estimate(instance_data):
+    result = CliRunner().invoke(
+        cli,
+        [
+            "estimate",
+            *REQUIRED_ARGS[2:],
+            "--instance",
+            "n1-highcpu-16",
+            "--min-replicas",
+            "1",
+            "--max-replicas",
+            "10",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "skrooge can't split n1-highcpu-16 pricing" in result.output
+
+
+def test_autoscaling_estimate_in_json(instance_data):
+    result = CliRunner().invoke(
+        cli, [*AUTOSCALING_ARGS, "--scaling-pattern", "Daytime", "-f", "json"]
+    )
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data["autoscaling"]["scaling_pattern"] == "daytime"
+    assert data["autoscaling"]["min_replicas"] == 2
+    assert data["autoscaling"]["max_replicas"] == 30
+    assert data["autoscaling"]["min"]["costs"]["monthly"] == 907
+    assert data["autoscaling"]["max"]["costs"]["monthly"] == 2722
+    # 30 replicas for 10 hours a day, on 3 nodes, and 2 the other 14, on 1
+    assert data["replicas"] == 13.67
+    assert data["required_instance_count"] == 1.83
+
+
+@pytest.mark.parametrize(
+    ("args", "error"),
+    [
+        (
+            ["--replicas", "3", "--min-replicas", "1", "--max-replicas", "5"],
+            "Pass either --replicas, or --min-replicas and --max-replicas, not both.",
+        ),
+        (["--min-replicas", "1"], "Pass both --min-replicas and --max-replicas."),
+        (["--max-replicas", "5"], "Pass both --min-replicas and --max-replicas."),
+        (
+            ["--replicas", "3", "--scaling-pattern", "daytime"],
+            "--scaling-pattern needs --min-replicas and --max-replicas.",
+        ),
+        (
+            ["--min-replicas", "6", "--max-replicas", "5"],
+            "Invalid value for '--min-replicas': 6 is more than --max-replicas 5.",
+        ),
+        (
+            ["--min-replicas", "1", "--max-replicas", "5", "--scaling-pattern", "x"],
+            "'x' is not one of 'business-hours', 'daytime', 'diurnal', 'hourly-spikes'.",
+        ),
+    ],
+)
+def test_invalid_autoscaling_options(args, error):
+    result = CliRunner().invoke(
+        cli,
+        ["estimate", "-i", "n2-standard-32", "-c", "2500", "-m", "2024", *args],
+    )
+    assert result.exit_code == 2
+    assert error in " ".join(result.output.split())

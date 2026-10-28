@@ -82,6 +82,30 @@ A cluster usually runs short of one resource while the other sits partly idle, s
 
 Bin-packed estimates use GCP's per-vCPU and per-GiB prices for each machine family. GPU machine types (`a2`, `g2`) also pay for their GPUs, and shared-core types (`f1-micro`, `g1-small`, `e2-micro`, `e2-small`, `e2-medium`) for a fraction of a vCPU, so those only get whole-node estimates.
 
+### Autoscaling
+
+For a deployment that autoscales, pass the fewest and most replicas you expect it to run, with `--min-replicas` and `--max-replicas` instead of `--replicas`. skrooge estimates the cost at each end, and an average over a typical week of scaling, set with `--scaling-pattern`:
+
+| Pattern | Replicas | Time at max |
+| --- | --- | --- |
+| `business-hours` (default) | Max from 08:00 to 18:00 on weekdays, min the rest of the time | 30% |
+| `daytime` | Max from 08:00 to 18:00 every day, min overnight | 42% |
+| `diurnal` | A smooth daily curve from min at night to max in the afternoon | Averages halfway |
+| `hourly-spikes` | Max for 20 minutes of every hour, like hourly batch jobs, min the rest of the time | 33% |
+
+The cluster autoscaler adds and removes whole nodes as replicas come and go, so the average whole-node cost is the average of the nodes needed at each point in the week. Between min and max, replicas are rounded up, as the Horizontal Pod Autoscaler does. Use 0 for `--min-replicas` for a workload that scales to zero.
+
+    $ uvx skrooge estimate --min-replicas 2 --max-replicas 30 --cpu 2500 --mem 2024 --instance n2-standard-32
+    This workload is running on n2-standard-32 instances in us-central1 with 32 cores and 128GiB of memory.
+    Autoscaling between 2 and 30 replicas, this workload will require 5.0 to 75.0 cores and 3.953125 to 59.296875 GiB of memory. This workload is cores-constrained.
+    At sud rates, this workload will require 1 instances at 2 replicas, costing $1.24/h (or $907/m (or $10890/y)), and 3 instances at 30 replicas, costing $3.73/h (or $2722/m (or $32669/y)).
+    With the business-hours scaling pattern (max replicas from 08:00 to 18:00 on weekdays, min the rest of the time), this workload will average 10.33 replicas on 1.6 instances, costing $1.98/h (or $1448/m (or $17372/y)) at sud rates.
+    Bin-packed in a cluster at 100% efficiency, this workload will cost $102/m at 2 replicas and $1532/m at 30, averaging $0.72/h (or $528/m (or $6329/y)): $477/m for cores and $51/m for memory.
+
+The patterns are rough shapes, not your traffic, and the cluster autoscaler waits about 10 minutes before removing a node that's no longer needed, so short spikes cost a little more on whole nodes than estimated.
+
+With `--format json`, `replicas`, `required_instance_count`, `costs` and `resource_costs` are the weekly averages, and `autoscaling` holds the `scaling_pattern`, `min_replicas` and `max_replicas`, and the estimates at each end in `min` and `max`.
+
 ### JSON output and custom formats
 
 `--format json` prints the whole estimate as one JSON object, for scripts or to format the output your own way with [`jq`](https://jqlang.org/). The most useful fields are:
@@ -212,8 +236,17 @@ Usage: skrooge estimate [OPTIONS]
 Options:
   -v, --verbosity LVL             Either CRITICAL, ERROR, WARNING, INFO or
                                   DEBUG
-  -r, --replicas INTEGER RANGE    The number of replicas in the deployment
-                                  [x>=1; required]
+  -r, --replicas INTEGER RANGE    The number of replicas in the deployment.
+                                  For an autoscaling one, use --min-replicas
+                                  and --max-replicas instead  [x>=1]
+  --min-replicas INTEGER RANGE    The fewest replicas an autoscaling
+                                  deployment is expected to run  [x>=0]
+  --max-replicas INTEGER RANGE    The most replicas an autoscaling deployment
+                                  is expected to run  [x>=1]
+  --scaling-pattern [business-hours|daytime|diurnal|hourly-spikes]
+                                  How an autoscaling deployment's replicas
+                                  vary over a week, for its average cost.
+                                  Default: business-hours
   -c, --cpu INTEGER               The amount of CPU change in milli-cores
                                   [required]
   -m, --mem INTEGER               The amount of memory change in MiB
