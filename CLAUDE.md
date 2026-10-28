@@ -30,6 +30,7 @@ skrooge/
 ├── scripts/
 │   └── bump-version.sh     # Version bumping script (run by Craft; updates pyproject.toml and uv.lock)
 ├── .github/
+│   ├── ISSUE_TEMPLATE/     # Issue form for missing instance types, linked from the unknown instance type error
 │   ├── workflows/          # CI/CD (test, publish, release, changelog, price updates)
 │   └── dependabot.yml      # Monthly grouped updates for GitHub Actions and uv.lock
 ├── pyproject.toml           # Project metadata, dependencies, tool config

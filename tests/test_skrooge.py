@@ -76,16 +76,17 @@ def test_invalid_instance_type_provides_similar_instances():
     )
 
 
-def test_invalid_instance_type_provides_github_bug_report_link():
+def test_invalid_instance_type_links_to_the_missing_instance_type_form():
     runner = CliRunner()
     result = runner.invoke(
         cli, ["estimate", *REQUIRED_ARGS, "--instance", "c2-standard-7"]
     )
     assert result.exit_code == 2
     assert (
-        "https://github.com/getsentry/skrooge/issues/new?assignees=&labels=&projects=&template=BUG_REPORT.md"
+        "https://github.com/getsentry/skrooge/issues/new?template=missing-instance-type.yml"
         in result.output
     )
+    assert "instance-type=c2-standard-7" in result.output
 
 
 def test_treat_negative_cpu_and_mem_values_as_absolute(instance_data):
