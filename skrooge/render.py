@@ -101,10 +101,10 @@ def scrooge_speech(data):
     )
     replicas = data["replicas"]
     nodes = data["required_instance_count"]
-    cores = data["delta_cpu"] / 1000
+    cores = number(data["delta_cpu"] / 1000)
     speech = [
         opening,
-        f"Thy {replicas:,} {plural(replicas, 'replica')} upon {data['instance']} in {data['region']} {'doth' if replicas == 1 else 'do'} want {number(cores)} {plural(cores, 'core')} and {number(data['delta_mem'] / 1024)} GiB of memory, and 'tis the {data['constrained_resource']} that bindeth thee.",
+        f"Thy {replicas:,} {plural(replicas, 'replica')} upon {data['instance']} in {data['region']} {'doth' if replicas == 1 else 'do'} want {cores} {plural(cores, 'core')} and {number(data['delta_mem'] / 1024)} GiB of memory, and 'tis the {data['constrained_resource']} that bindeth thee.",
         f"{nodes:,} whole {plural(nodes, 'node')} thou must have, at {costs['class']} rates: {coins(costs['hourly'], 2)} the hour, {coins(costs['monthly'])} the month, and {coins(costs['yearly'])} the year!",
     ]
     resource_costs = data["resource_costs"]
@@ -147,8 +147,9 @@ def speech_bubble(paragraphs, width=58):
     return "\n".join(bubble)
 
 
-def plural(count, word):
-    return word if count == 1 else f"{word}s"
+def plural(amount, word):
+    "The word for the amount, as printed, so it matches when the amount was rounded"
+    return word if str(amount) == "1" else f"{word}s"
 
 
 def number(amount):

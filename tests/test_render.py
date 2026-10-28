@@ -154,6 +154,12 @@ def test_scrooge_speech_for_one(estimate_data):
     assert speech[2].startswith("1 whole node thou must have")
 
 
+@pytest.mark.parametrize("delta_cpu", [999, 1001])
+def test_scrooge_speech_for_cores_that_round_to_one(estimate_data, delta_cpu):
+    estimate_data["delta_cpu"] = delta_cpu
+    assert " want 1 core and " in scrooge_speech(estimate_data)[1]
+
+
 def test_scrooge_speech_without_bin_packed_estimate(estimate_data):
     estimate_data["resource_costs"] = None
     assert scrooge_speech(estimate_data)[3] == (
