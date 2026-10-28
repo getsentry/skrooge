@@ -3,6 +3,8 @@ import textwrap
 
 import click
 
+from .utils import SCALING_PATTERNS, is_percentage_pattern
+
 SCROOGE = r'''
            \
             \       _.-""""-._
@@ -98,6 +100,9 @@ def render(format, data):
 
 
 def render_english(data):
+    if data.get("autoscaling"):
+        render_autoscaling_english(data)
+        return
     click.echo(
         f"This workload is running on {data['instance']} instances in {data['region']} with {data['instance_specs']['cores']} cores and {data['instance_specs']['memory']}GiB of memory."
     )
@@ -116,6 +121,43 @@ def render_english(data):
         click.echo(
             f"skrooge can't split {data['instance']} pricing into cores and memory, so there's no bin-packed estimate."
         )
+
+
+def render_autoscaling_english(data):
+    autoscaling = data["autoscaling"]
+    low, high = autoscaling["min"], autoscaling["max"]
+    pattern = autoscaling["scaling_pattern"]
+    click.echo(
+        f"This workload is running on {data['instance']} instances in {data['region']} with {data['instance_specs']['cores']} cores and {data['instance_specs']['memory']}GiB of memory."
+    )
+    click.echo(
+        f"Autoscaling between {low['replicas']} and {high['replicas']} replicas, this workload will require {low['delta_cpu'] / 1000} to {high['delta_cpu'] / 1000} cores and {low['delta_mem'] / 1024} to {high['delta_mem'] / 1024} GiB of memory. This workload is {data['constrained_resource']}-constrained."
+    )
+    click.echo(
+        f"At {data['costs']['class']} rates, this workload will require {low['required_instance_count']} instances at {low['replicas']} replicas, costing {costs_text(low['costs'])}, and {high['required_instance_count']} instances at {high['replicas']} replicas, costing {costs_text(high['costs'])}."
+    )
+    click.echo(
+        f"{scaling_pattern_text(pattern)}, this workload will average {data['replicas']} replicas on {data['required_instance_count']} instances, costing {costs_text(data['costs'])} at {data['costs']['class']} rates."
+    )
+    resource_costs = data["resource_costs"]
+    if resource_costs:
+        click.echo(
+            f"Bin-packed in a cluster at {efficiency_text(data['packing_efficiency'])}, this workload will cost ${low['resource_costs']['total']['monthly']}/m at {low['replicas']} replicas and ${high['resource_costs']['total']['monthly']}/m at {high['replicas']}, averaging {costs_text(resource_costs['total'])}: ${resource_costs['cores']['monthly']}/m for cores and ${resource_costs['memory']['monthly']}/m for memory."
+        )
+    else:
+        click.echo(
+            f"skrooge can't split {data['instance']} pricing into cores and memory, so there's no bin-packed estimate."
+        )
+
+
+def scaling_pattern_text(pattern):
+    if is_percentage_pattern(pattern):
+        return f"At max replicas {pattern} of the time and min the rest"
+    return f"With the {pattern} scaling pattern ({SCALING_PATTERNS[pattern]['description']})"
+
+
+def costs_text(costs):
+    return f"${costs['hourly']}/h (or ${costs['monthly']}/m (or ${costs['yearly']}/y))"
 
 
 def efficiency_text(packing_efficiency):
@@ -143,12 +185,14 @@ def render_character(speech, art):
 
 
 def spoken(data):
-    "The estimate's amounts, as a character says them"
+    """The estimate's amounts, as a character says them. For an autoscaling estimate,
+    the replicas, nodes and costs are weekly averages, and "min" and "max" hold the
+    estimates at each end."""
     costs = data["costs"]
     resource_costs = data["resource_costs"]
-    return {
-        "replicas": f"{data['replicas']:,}",
-        "nodes": f"{data['required_instance_count']:,}",
+    said = {
+        "replicas": number(data["replicas"]),
+        "nodes": number(data["required_instance_count"]),
         "cores": number(data["delta_cpu"] / 1000),
         "memory": number(data["delta_mem"] / 1024),
         "hourly": coins(costs["hourly"], 2),
@@ -161,6 +205,11 @@ def spoken(data):
             for period in ("monthly", "yearly")
         },
     }
+    autoscaling = data.get("autoscaling")
+    if autoscaling:
+        for end in ("min", "max"):
+            said[end] = spoken({**autoscaling[end], "autoscaling": None})
+    return said
 
 
 def mood(moods, data):
@@ -177,14 +226,31 @@ def scrooge_speech(data):
     opening, closing = mood(SCROOGE_MOODS, data)
     said = spoken(data)
     replicas, nodes, cores = said["replicas"], said["nodes"], said["cores"]
-    speech = [
-        opening,
-        f"Thy {replicas} {plural(replicas, 'replica')} upon {data['instance']} in {data['region']} {'doth' if replicas == '1' else 'do'} want {cores} {plural(cores, 'core')} and {said['memory']} GiB of memory, and 'tis the {data['constrained_resource']} that bindeth thee.",
-        f"{nodes} whole {plural(nodes, 'node')} thou must have, at {data['costs']['class']} rates: {said['hourly']} the hour, {said['monthly']} the month, and {said['yearly']} the year!",
-    ]
+    autoscaling = data.get("autoscaling")
+    if autoscaling:
+        low, high = said["min"], said["max"]
+        pattern = autoscaling["scaling_pattern"]
+        if is_percentage_pattern(pattern):
+            reckoning = f"At thy most {pattern} of the time and thy least the rest"
+        else:
+            reckoning = (
+                f"By thy {pattern} pattern ({SCALING_PATTERNS[pattern]['description']})"
+            )
+        speech = [
+            opening,
+            f"Thy replicas do wax and wane betwixt {low['replicas']} and {high['replicas']} upon {data['instance']} in {data['region']}, wanting {low['cores']} to {high['cores']} cores and {low['memory']} to {high['memory']} GiB of memory, and 'tis the {data['constrained_resource']} that bindeth thee.",
+            f"At {data['costs']['class']} rates, {low['nodes']} whole {plural(low['nodes'], 'node')} for {low['replicas']} {plural(low['replicas'], 'replica')} costeth {low['monthly']} the month, and {high['nodes']} for {high['replicas']} costeth {high['monthly']}!",
+            f"{reckoning}, thou wilt average {replicas} {plural(replicas, 'replica')} on {nodes} {plural(nodes, 'node')}: {said['hourly']} the hour, {said['monthly']} the month, and {said['yearly']} the year!",
+        ]
+    else:
+        speech = [
+            opening,
+            f"Thy {replicas} {plural(replicas, 'replica')} upon {data['instance']} in {data['region']} {'doth' if replicas == '1' else 'do'} want {cores} {plural(cores, 'core')} and {said['memory']} GiB of memory, and 'tis the {data['constrained_resource']} that bindeth thee.",
+            f"{nodes} whole {plural(nodes, 'node')} thou must have, at {data['costs']['class']} rates: {said['hourly']} the hour, {said['monthly']} the month, and {said['yearly']} the year!",
+        ]
     if said["packed"]:
         speech.append(
-            f"Packed as tight as the coins in my strongbox, at {efficiency_text(data['packing_efficiency'])}, 'twould be {said['packed']['monthly']} the month and {said['packed']['yearly']} the year."
+            f"Packed as tight as the coins in my strongbox, at {efficiency_text(data['packing_efficiency'])}, 'twould be{' on average' if autoscaling else ''} {said['packed']['monthly']} the month and {said['packed']['yearly']} the year."
         )
     else:
         speech.append(
@@ -202,14 +268,29 @@ def mcduck_speech(data):
     opening, closing = mood(MCDUCK_MOODS, data)
     said = spoken(data)
     replicas, nodes, cores = said["replicas"], said["nodes"], said["cores"]
-    speech = [
-        opening,
-        f"Yer {replicas} {plural(replicas, 'replica')} on {data['instance']} in {data['region']} {'wants' if replicas == '1' else 'want'} {cores} {plural(cores, 'core')} and {said['memory']} GiB o' memory, and it's the {data['constrained_resource']} that's got ye by the sporran.",
-        f"That's {nodes} whole {plural(nodes, 'node')} at {data['costs']['class']} rates: {said['hourly']} an hour, {said['monthly']} a month, and {said['yearly']} a year!",
-    ]
+    autoscaling = data.get("autoscaling")
+    if autoscaling:
+        low, high = said["min"], said["max"]
+        pattern = autoscaling["scaling_pattern"]
+        if is_percentage_pattern(pattern):
+            reckoning = f"At yer most {pattern} o' the time and yer least the rest"
+        else:
+            reckoning = f"Wi' yer {pattern} pattern ({SCALING_PATTERNS[pattern]['description']})"
+        speech = [
+            opening,
+            f"Yer replicas go up an' doon between {low['replicas']} and {high['replicas']} on {data['instance']} in {data['region']}, wantin' {low['cores']} to {high['cores']} cores and {low['memory']} to {high['memory']} GiB o' memory, and it's the {data['constrained_resource']} that's got ye by the sporran.",
+            f"At {data['costs']['class']} rates, that's {low['nodes']} whole {plural(low['nodes'], 'node')} for {low['replicas']} {plural(low['replicas'], 'replica')} at {low['monthly']} a month, and {high['nodes']} for {high['replicas']} at {high['monthly']} a month!",
+            f"{reckoning}, ye'll average {replicas} {plural(replicas, 'replica')} on {nodes} {plural(nodes, 'node')}: {said['hourly']} an hour, {said['monthly']} a month, and {said['yearly']} a year!",
+        ]
+    else:
+        speech = [
+            opening,
+            f"Yer {replicas} {plural(replicas, 'replica')} on {data['instance']} in {data['region']} {'wants' if replicas == '1' else 'want'} {cores} {plural(cores, 'core')} and {said['memory']} GiB o' memory, and it's the {data['constrained_resource']} that's got ye by the sporran.",
+            f"That's {nodes} whole {plural(nodes, 'node')} at {data['costs']['class']} rates: {said['hourly']} an hour, {said['monthly']} a month, and {said['yearly']} a year!",
+        ]
     if said["packed"]:
         speech.append(
-            f"Packed as tight as the coins in me money bin, at {efficiency_text(data['packing_efficiency'])}, it'd be {said['packed']['monthly']} a month and {said['packed']['yearly']} a year."
+            f"Packed as tight as the coins in me money bin, at {efficiency_text(data['packing_efficiency'])}, it'd be{' on average' if autoscaling else ''} {said['packed']['monthly']} a month and {said['packed']['yearly']} a year."
         )
     else:
         speech.append(
