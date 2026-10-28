@@ -77,7 +77,7 @@ def cli():
 )
 @click.option(
     "--scaling-pattern",
-    help=f"How an autoscaling deployment's replicas vary over a week, for its average cost, or a percentage of --max-replicas, like 60%, that it runs all the time. Default: {DEFAULT_SCALING_PATTERN}",
+    help=f"How an autoscaling deployment's replicas vary over a week, for its average cost, or the percentage of --max-replicas it runs all the time, like 60%. Default: {DEFAULT_SCALING_PATTERN}",
     type=ScalingPattern(list(SCALING_PATTERNS), case_sensitive=False),
     metavar=f"[{'|'.join(SCALING_PATTERNS)}|N%]",
 )

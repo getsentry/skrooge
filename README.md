@@ -248,10 +248,9 @@ Options:
                                   is expected to run  [x>=1]
   --scaling-pattern [business-hours|daytime|diurnal|hourly-spikes|N%]
                                   How an autoscaling deployment's replicas
-                                  vary over a week, for its average cost, or a
-                                  percentage of --max-replicas, like 60%, that
-                                  it runs all the time. Default: business-
-                                  hours
+                                  vary over a week, for its average cost, or
+                                  the percentage of --max-replicas it runs all
+                                  the time, like 60%. Default: business-hours
   -c, --cpu INTEGER               The amount of CPU change in milli-cores
                                   [required]
   -m, --mem INTEGER               The amount of memory change in MiB
