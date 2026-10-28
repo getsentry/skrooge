@@ -414,7 +414,7 @@ def test_mcduck_format(instance_data):
     result = CliRunner().invoke(cli, [*WEB_ARGS, "--format", "mcduck"])
     assert result.exit_code == 0
     assert "Yer 30 replicas on n2-standard-32" in result.output
-    assert "\\________/" in result.output
+    assert "<___| <__|" in result.output
 
 
 def test_packing_efficiency_by_resource(instance_data):
