@@ -128,7 +128,7 @@ GitHub Actions workflows target `main` branch:
 - **`changelog-preview.yml`**: Previews changelog entries on PRs.
 - **`update-instances.yml`**: Daily (and manual) run of the scraper, authenticated with workload identity federation when the `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` variables are set, otherwise the `GCP_BILLING_API_KEY` secret. It validates the output, runs the tests against it, and if `instances.json` changed, force-pushes a single commit on top of `main` to `automation/update-instances` and opens or updates one PR with the diff report as its description. It uses the Sentry release bot GitHub App's token, because PRs opened with `GITHUB_TOKEN` don't trigger CI. It never pushes to `main`.
 
-The step-by-step release process (changelog, running the Release workflow with an explicit version, approving in getsentry/publish) is documented in the "Releasing" section of `README.md`. Craft doesn't edit `CHANGELOG.md` here (no changelog policy is configured), and `.craft.yml`'s `minVersion: 1.8.1` means the Release workflow needs an explicit version, not `auto` or a bump keyword.
+The step-by-step release process (changelog, running the Release workflow with an explicit version; getsentry/publish auto-approves skrooge's releases, so there's no approval step) is documented in the "Releasing" section of `README.md`. Craft doesn't edit `CHANGELOG.md` here (no changelog policy is configured), and `.craft.yml`'s `minVersion: 1.8.1` means the Release workflow needs an explicit version, not `auto` or a bump keyword.
 
 ## Code Conventions
 
