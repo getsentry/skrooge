@@ -2,7 +2,7 @@ import json
 
 import click
 
-from .utils import SCALING_PATTERNS
+from .utils import SCALING_PATTERNS, is_percentage_pattern
 
 
 def render(format, data):
@@ -52,7 +52,7 @@ def render_autoscaling_english(data):
         f"At {data['costs']['class']} rates, this workload will require {low['required_instance_count']} instances at {low['replicas']} replicas, costing {costs_text(low['costs'])}, and {high['required_instance_count']} instances at {high['replicas']} replicas, costing {costs_text(high['costs'])}."
     )
     click.echo(
-        f"With the {pattern} scaling pattern ({SCALING_PATTERNS[pattern]['description']}), this workload will average {data['replicas']} replicas on {data['required_instance_count']} instances, costing {costs_text(data['costs'])} at {data['costs']['class']} rates."
+        f"{scaling_pattern_text(pattern)}, this workload will average {data['replicas']} replicas on {data['required_instance_count']} instances, costing {costs_text(data['costs'])} at {data['costs']['class']} rates."
     )
     resource_costs = data["resource_costs"]
     if resource_costs:
@@ -63,6 +63,12 @@ def render_autoscaling_english(data):
         click.echo(
             f"skrooge can't split {data['instance']} pricing into cores and memory, so there's no bin-packed estimate."
         )
+
+
+def scaling_pattern_text(pattern):
+    if is_percentage_pattern(pattern):
+        return f"Running a steady {pattern} of its max replicas"
+    return f"With the {pattern} scaling pattern ({SCALING_PATTERNS[pattern]['description']})"
 
 
 def costs_text(costs):

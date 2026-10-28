@@ -35,6 +35,22 @@ class RegionChoice(click.Choice):
         return f"{value!r} isn't a region skrooge has pricing for.{suggestion}\nList them with: skrooge regions"
 
 
+class ScalingPattern(click.Choice):
+    "A choice of scaling pattern, or a percentage of max replicas like 60%"
+
+    def convert(self, value, param, ctx):
+        try:
+            percentage = float(str(value).removesuffix("%"))
+        except ValueError:
+            return super().convert(value, param, ctx)
+        if not 0 <= percentage <= 100:
+            self.fail(f"{value!r} is not a percentage from 0 to 100.", param, ctx)
+        return f"{percentage:g}%"
+
+    def get_invalid_choice_message(self, value, ctx):
+        return f"{super().get_invalid_choice_message(value, ctx).removesuffix('.')}, or a percentage like '60%'."
+
+
 @click.group()
 @click.version_option()
 def cli():
@@ -61,8 +77,9 @@ def cli():
 )
 @click.option(
     "--scaling-pattern",
-    help=f"How an autoscaling deployment's replicas vary over a week, for its average cost. Default: {DEFAULT_SCALING_PATTERN}",
-    type=click.Choice(list(SCALING_PATTERNS), case_sensitive=False),
+    help=f"How an autoscaling deployment's replicas vary over a week, for its average cost, or a percentage of --max-replicas, like 60%, that it runs all the time. Default: {DEFAULT_SCALING_PATTERN}",
+    type=ScalingPattern(list(SCALING_PATTERNS), case_sensitive=False),
+    metavar=f"[{'|'.join(SCALING_PATTERNS)}|N%]",
 )
 @click.option(
     "-c",

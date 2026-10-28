@@ -22,6 +22,7 @@ from skrooge.utils import (
     instance_names,
     missing_instance_type_link,
     replicas_at,
+    replicas_shares,
     resource_prices,
 )
 
@@ -718,3 +719,37 @@ def test_autoscaling_estimate_without_resource_prices():
     data = web_autoscaling_estimate(instance="c2-standard-30")
     assert data["resource_costs"] is None
     assert data["autoscaling"]["max"]["resource_costs"] is None
+
+
+@pytest.mark.parametrize(
+    ("pattern", "min_replicas", "replicas"),
+    [
+        # The issue's example: 60% of 10 replicas
+        ("60%", 1, 6),
+        ("33.3%", 1, 4),
+        ("100%", 1, 10),
+        # Never fewer than min replicas
+        ("20%", 5, 5),
+        ("0%", 0, 0),
+    ],
+)
+def test_percentage_pattern_runs_steady_replicas(pattern, min_replicas, replicas):
+    assert replicas_shares(pattern, min_replicas, 10) == {replicas: 1}
+
+
+def test_autoscaling_estimate_with_a_percentage():
+    data = web_autoscaling_estimate(scaling_pattern="60%")
+    assert data["replicas"] == 18
+    # 45 cores on 32-core nodes
+    assert data["required_instance_count"] == 2
+    steady = calculate_estimate(
+        INSTANCE_TYPES,
+        "n2-standard-32",
+        18,
+        cpu=2500,
+        mem=2024,
+        cost_class="sud",
+        region="us-central1",
+    )
+    assert data["costs"] == steady["costs"]
+    assert data["resource_costs"] == steady["resource_costs"]

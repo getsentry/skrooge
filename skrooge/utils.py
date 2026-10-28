@@ -414,6 +414,27 @@ def replicas_at(load, min_replicas, max_replicas):
     return min_replicas + math.ceil(round(load * (max_replicas - min_replicas), 6))
 
 
+def is_percentage_pattern(scaling_pattern):
+    return scaling_pattern.endswith("%")
+
+
+def replicas_shares(scaling_pattern, min_replicas, max_replicas):
+    """How much of the week a workload runs each number of replicas, as {replicas: share}
+
+    scaling_pattern is a name in SCALING_PATTERNS, or a percentage of max_replicas
+    like "60%" for a workload that runs that many replicas all the time.
+    """
+    if is_percentage_pattern(scaling_pattern):
+        percentage = float(scaling_pattern.removesuffix("%"))
+        replicas = math.ceil(round(percentage * max_replicas / 100, 6))
+        return {max(min_replicas, replicas): 1}
+    shares = {}
+    for share, load in SCALING_PATTERNS[scaling_pattern]["levels"]:
+        replicas = replicas_at(load, min_replicas, max_replicas)
+        shares[replicas] = shares.get(replicas, 0) + share
+    return shares
+
+
 def calculate_autoscaling_estimate(
     instance_types,
     instance,
@@ -430,14 +451,11 @@ def calculate_autoscaling_estimate(
     that autoscales between min_replicas and max_replicas
 
     Returns calculate_estimate's result for the workload's average over the scaling
-    pattern, so replicas and required_instance_count are averages. Its "autoscaling"
-    key holds the pattern and the estimates at min_replicas and max_replicas.
+    pattern (see replicas_shares), so replicas and required_instance_count are
+    averages. Its "autoscaling" key holds the pattern and the estimates at
+    min_replicas and max_replicas.
     """
-    levels = SCALING_PATTERNS[scaling_pattern]["levels"]
-    shares = {}
-    for share, load in levels:
-        replicas = replicas_at(load, min_replicas, max_replicas)
-        shares[replicas] = shares.get(replicas, 0) + share
+    shares = replicas_shares(scaling_pattern, min_replicas, max_replicas)
     estimates = {
         replicas: calculate_estimate(
             instance_types,
