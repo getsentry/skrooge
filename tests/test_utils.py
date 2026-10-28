@@ -1,4 +1,5 @@
 import json
+import math
 import re
 import urllib.parse
 from importlib.metadata import PackageNotFoundError, version
@@ -8,8 +9,10 @@ import pytest
 
 from skrooge import utils
 from skrooge.utils import (
+    SCALING_PATTERNS,
     InstanceNotFoundError,
     PricingNotFoundError,
+    calculate_autoscaling_estimate,
     calculate_estimate,
     derive_resource_prices,
     determine_constrained_resource,
@@ -18,6 +21,8 @@ from skrooge.utils import (
     hourly_price,
     instance_names,
     missing_instance_type_link,
+    replicas_at,
+    replicas_shares,
     resource_prices,
 )
 
@@ -615,3 +620,130 @@ def test_calculate_estimate_without_resource_prices():
     )
     assert data["resource_prices"] is None
     assert data["resource_costs"] is None
+
+
+def web_autoscaling_estimate(min_replicas=2, max_replicas=30, **kwargs):
+    return calculate_autoscaling_estimate(
+        INSTANCE_TYPES,
+        kwargs.pop("instance", "n2-standard-32"),
+        min_replicas,
+        max_replicas,
+        cpu=2500,
+        mem=2024,
+        cost_class="sud",
+        region="us-central1",
+        **kwargs,
+    )
+
+
+@pytest.mark.parametrize("pattern", SCALING_PATTERNS)
+def test_scaling_patterns_cover_all_the_time(pattern):
+    levels = SCALING_PATTERNS[pattern]["levels"]
+    assert sum(share for share, _ in levels) == pytest.approx(1)
+    assert all(0 <= load <= 1 for _, load in levels)
+
+
+@pytest.mark.parametrize(
+    ("load", "replicas"),
+    [(0, 2), (1, 30), (0.5, 16), (0.51, 17), ((1 - math.cos(math.pi / 3)) / 2, 9)],
+)
+def test_replicas_at_rounds_up(load, replicas):
+    assert replicas_at(load, 2, 30) == replicas
+
+
+def test_autoscaling_estimate_averages_over_the_scaling_pattern():
+    data = web_autoscaling_estimate()
+    # 30 replicas for 50 hours a week, on 3 nodes, and 2 the other 118, on 1
+    assert data["replicas"] == pytest.approx(2 + 28 * 50 / 168, abs=0.01)
+    assert data["required_instance_count"] == pytest.approx(
+        (3 * 50 + 118) / 168, abs=0.01
+    )
+    price = hourly_price(INSTANCE_TYPES["n2"]["n2-standard-32"], "sud", "us-central1")
+    assert data["costs"]["hourly"] == round(price * (3 * 50 + 118) / 168, 2)
+    assert data["autoscaling"]["scaling_pattern"] == "business-hours"
+
+
+def test_autoscaling_estimate_bounds_are_estimates_at_min_and_max_replicas():
+    data = web_autoscaling_estimate()
+    for bound, replicas in (("min", 2), ("max", 30)):
+        estimate = calculate_estimate(
+            INSTANCE_TYPES,
+            "n2-standard-32",
+            replicas,
+            cpu=2500,
+            mem=2024,
+            cost_class="sud",
+            region="us-central1",
+        )
+        for key in ("required_instance_count", "costs", "resource_costs"):
+            assert data["autoscaling"][bound][key] == estimate[key]
+
+
+@pytest.mark.parametrize("pattern", SCALING_PATTERNS)
+def test_autoscaling_estimate_is_between_its_bounds(pattern):
+    data = web_autoscaling_estimate(scaling_pattern=pattern)
+    low, high = data["autoscaling"]["min"], data["autoscaling"]["max"]
+    for costs in ("costs", "resource_costs"):
+        total = (lambda c: c) if costs == "costs" else (lambda c: c["total"])
+        assert (
+            total(low[costs])["monthly"]
+            < total(data[costs])["monthly"]
+            < total(high[costs])["monthly"]
+        )
+
+
+def test_autoscaling_estimate_bin_packed_cost_follows_the_average_replicas():
+    data = web_autoscaling_estimate()
+    low = data["autoscaling"]["min"]["resource_costs"]["total"]["monthly"]
+    high = data["autoscaling"]["max"]["resource_costs"]["total"]["monthly"]
+    assert data["resource_costs"]["total"]["monthly"] == pytest.approx(
+        low + (high - low) * 50 / 168, abs=1
+    )
+
+
+def test_autoscaling_estimate_with_fixed_replicas():
+    data = web_autoscaling_estimate(30, 30)
+    assert data["replicas"] == 30
+    assert data["costs"] == web_estimate()["costs"]
+    assert data["resource_costs"] == web_estimate()["resource_costs"]
+
+
+def test_autoscaling_estimate_scaling_to_zero():
+    data = web_autoscaling_estimate(0, 30)
+    assert data["autoscaling"]["min"]["required_instance_count"] == 0
+    assert data["autoscaling"]["min"]["costs"]["hourly"] == 0
+    assert 0 < data["costs"]["hourly"] < data["autoscaling"]["max"]["costs"]["hourly"]
+
+
+def test_autoscaling_estimate_without_resource_prices():
+    data = web_autoscaling_estimate(instance="c2-standard-30")
+    assert data["resource_costs"] is None
+    assert data["autoscaling"]["max"]["resource_costs"] is None
+
+
+@pytest.mark.parametrize(
+    ("pattern", "shares"),
+    [
+        ("25%", {10: 0.25, 1: 0.75}),
+        ("0%", {10: 0, 1: 1}),
+        ("100%", {10: 1, 1: 0}),
+    ],
+)
+def test_percentage_pattern_is_the_time_at_max_replicas(pattern, shares):
+    assert replicas_shares(pattern, 1, 10) == pytest.approx(shares)
+
+
+def test_percentage_pattern_with_fixed_replicas():
+    assert replicas_shares("25%", 5, 5) == pytest.approx({5: 1})
+
+
+def test_autoscaling_estimate_with_a_percentage():
+    data = web_autoscaling_estimate(scaling_pattern="25%")
+    assert data["replicas"] == 9
+    # 3 nodes a quarter of the time, and 1 the rest
+    assert data["required_instance_count"] == 1.5
+    # Matches a named pattern with as much time at max
+    assert (
+        web_autoscaling_estimate(scaling_pattern="33.333333%")["costs"]
+        == web_autoscaling_estimate(scaling_pattern="hourly-spikes")["costs"]
+    )

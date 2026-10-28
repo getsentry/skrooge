@@ -30,6 +30,31 @@ SHARED_CORE_INSTANCE_TYPES = {
 
 MISSING_INSTANCE_TYPE_TEMPLATE = "missing-instance-type.yml"
 
+# How an autoscaling workload's load splits up a typical week, as (share of the
+# time, load), where load 0 runs the minimum number of replicas and 1 the maximum
+SCALING_PATTERNS = {
+    "business-hours": {
+        "description": "max replicas from 08:00 to 18:00 on weekdays, min the rest of the time",
+        "levels": [(5 * 10 / (7 * 24), 1), (1 - 5 * 10 / (7 * 24), 0)],
+    },
+    "daytime": {
+        "description": "max replicas from 08:00 to 18:00 every day, min overnight",
+        "levels": [(10 / 24, 1), (14 / 24, 0)],
+    },
+    "diurnal": {
+        "description": "a smooth daily curve from min replicas at night to max in the afternoon",
+        "levels": [
+            (1 / 24, (1 - math.cos(2 * math.pi * hour / 24)) / 2) for hour in range(24)
+        ],
+    },
+    "hourly-spikes": {
+        "description": "max replicas for 20 minutes of every hour, min the rest of the time",
+        "levels": [(1 / 3, 1), (2 / 3, 0)],
+    },
+}
+
+DEFAULT_SCALING_PATTERN = "business-hours"
+
 
 class EstimateError(ValueError):
     "The inputs can't be estimated; the message explains why to the user"
@@ -381,3 +406,121 @@ def calculate_estimate(
 
     logger.info(f"{data=}")
     return data
+
+
+def replicas_at(load, min_replicas, max_replicas):
+    "The replicas running at a load between 0 and 1, rounded up as the HPA does"
+    # Round first so floating point error can't add a replica
+    return min_replicas + math.ceil(round(load * (max_replicas - min_replicas), 6))
+
+
+def is_percentage_pattern(scaling_pattern):
+    return scaling_pattern.endswith("%")
+
+
+def replicas_shares(scaling_pattern, min_replicas, max_replicas):
+    """How much of the week a workload runs each number of replicas, as {replicas: share}
+
+    scaling_pattern is a name in SCALING_PATTERNS, or a percentage like "25%" for a
+    workload that runs max_replicas that share of the time and min_replicas the rest.
+    """
+    if is_percentage_pattern(scaling_pattern):
+        at_max = float(scaling_pattern.removesuffix("%")) / 100
+        levels = [(at_max, 1), (1 - at_max, 0)]
+    else:
+        levels = SCALING_PATTERNS[scaling_pattern]["levels"]
+    shares = {}
+    for share, load in levels:
+        replicas = replicas_at(load, min_replicas, max_replicas)
+        shares[replicas] = shares.get(replicas, 0) + share
+    return shares
+
+
+def calculate_autoscaling_estimate(
+    instance_types,
+    instance,
+    min_replicas,
+    max_replicas,
+    cpu,
+    mem,
+    cost_class,
+    region,
+    scaling_pattern=DEFAULT_SCALING_PATTERN,
+    packing_efficiency=None,
+):
+    """Estimate a change of cpu milli-cores and mem MiB in each replica of a workload
+    that autoscales between min_replicas and max_replicas
+
+    Returns calculate_estimate's result for the workload's average over the scaling
+    pattern (see replicas_shares), so replicas and required_instance_count are
+    averages. Its "autoscaling" key holds the pattern and the estimates at
+    min_replicas and max_replicas.
+    """
+    shares = replicas_shares(scaling_pattern, min_replicas, max_replicas)
+    estimates = {
+        replicas: calculate_estimate(
+            instance_types,
+            instance,
+            replicas,
+            cpu,
+            mem,
+            cost_class=cost_class,
+            region=region,
+            packing_efficiency=packing_efficiency,
+        )
+        for replicas in {*shares, min_replicas, max_replicas}
+    }
+    # The cluster autoscaler adds and removes whole nodes as the replicas change
+    average_replicas = sum(replicas * share for replicas, share in shares.items())
+    average_instance_count = sum(
+        estimates[replicas]["required_instance_count"] * share
+        for replicas, share in shares.items()
+    )
+    logger.info(f"{average_replicas=} {average_instance_count=}")
+
+    data = estimates[max_replicas]
+    delta_cpu = average_replicas * abs(cpu)
+    delta_mem = average_replicas * abs(mem)
+    price = hourly_price(
+        find_instance_data(instance_types, instance), cost_class, region
+    )
+    prices = data["resource_prices"]
+    return {
+        **data,
+        "replicas": round(average_replicas, 2),
+        "delta_cpu": round(delta_cpu),
+        "delta_mem": round(delta_mem),
+        "resource_requirement": round(
+            delta_cpu if data["constrained_resource"] == "cores" else delta_mem
+        ),
+        "required_instance_count": round(average_instance_count, 2),
+        "costs": {
+            **period_costs(price * average_instance_count),
+            "class": cost_class,
+            "region": region,
+        },
+        "resource_costs": calculate_resource_cost(
+            prices, delta_cpu, delta_mem, data["packing_efficiency"]
+        )
+        if prices
+        else None,
+        "autoscaling": {
+            "scaling_pattern": scaling_pattern,
+            "min_replicas": min_replicas,
+            "max_replicas": max_replicas,
+            **{
+                bound: {
+                    key: estimates[replicas][key]
+                    for key in (
+                        "replicas",
+                        "delta_cpu",
+                        "delta_mem",
+                        "required_instance_count",
+                        "costs",
+                        "resource_costs",
+                    )
+                }
+                for bound, replicas in (("min", min_replicas), ("max", max_replicas))
+            },
+        },
+    }
