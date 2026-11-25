@@ -1,4 +1,7 @@
-minVersion: 1.8.1
+minVersion: 3.9.0
+preReleaseCommand: bash scripts/bump-version.sh
+versioning:
+  policy: manual
 targets:
 - name: pypi
 - name: github
